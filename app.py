@@ -1,4 +1,5 @@
 import json
+import random
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -25,49 +26,84 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. 初始化遊戲狀態 (未輸入名字前顯示開局設定)
+# 3. 隨機開局庫與初始化遊戲狀態
 # ---------------------------------------------------------
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
 
+# 隨機池設定
+LOCATIONS = [
+    {"loc": "仙界·凌霄外園雜役司", "identity": "九霄雲宮雜役仙侍", "bg": "每天負責打掃仙園落花，是仙界最底層的小薯。"},
+    {"loc": "仙界·洗髓池畔殘垣", "identity": "無依無靠的洗髓池棄兒", "bg": "從小被拋棄在仙界洗髓池邊，靠撿拾廢棄仙草長大。"},
+    {"loc": "仙界·荒古藥園角落", "identity": "藥王谷看守藥童", "bg": "每天負責照料珍稀仙草，經常被仙官差遣打雜。"},
+    {"loc": "仙界·神兵鍛造坊後山", "identity": "打鐵小工奴侍", "bg": "在仙界鍛造坊幹粗活，整天與仙火碎石打交道。"}
+]
+
+BLOODLINES = [
+    "鳳凰涅槃血脈（未覺醒：體內隱隱有金黑色涅槃火光流轉）",
+    "鴻蒙神魔同體印（未覺醒：左眼偶爾閃過魔氣，右眼透出仙光）",
+    "太古星辰仙帝遺脈（封印中：眉心隱藏著一枚殘破的星辰印記）",
+    "九幽妖皇真靈寄宿（沉睡中：胸口處生有一枚古老的妖族聖紋）"
+]
+
+SPECIAL_ITEMS = [
+    {"name": "殘破玉佩", "count": 1, "desc": "從小隨身攜帶的殘破玉佩，散發著微弱的古老氣息。"},
+    {"name": "無字天書殘頁", "count": 1, "desc": "在廢墟中撿到的古舊紙頁，隱隱有文字流轉。"},
+    {"name": "鏽蝕仙劍", "count": 1, "desc": "看似一把普通廢鐵劍，卻能在深夜發出陣陣劍鳴。"},
+    {"name": "神秘獸牙", "count": 1, "desc": "散發著淡淡野性威壓的獸牙佩飾。"}
+]
+
 def init_game(player_name):
+    loc_info = random.choice(LOCATIONS)
+    bloodline = random.choice(BLOODLINES)
+    special_item = random.choice(SPECIAL_ITEMS)
+    
+    # 隨機微調初始屬性
+    comprehension = random.randint(8, 12)
+    fortune = random.randint(8, 12)
+    charm = random.randint(8, 12)
+
     st.session_state.game_state = {
         "player": {
-            "name": player_name if player_name.strip() else "無名小仙",
-            "identity": "仙界·九霄雲宮雜役仙侍（仙界小薯）",
-            "bloodline": "未知（體內隱隱有金黑色遠古印記流轉，尚未覺醒）",
+            "name": player_name if player_name.strip() else "詩柔",
+            "identity": f"{loc_info['loc']}·{loc_info['identity']}",
+            "bloodline": bloodline,
             "hp": "100/100",
             "mp": "30/30",
             "fullness": "90/100",
             "realm": "微末小仙 / 煉氣初期",
-            "location": "仙界·凌霄外園雜役司",
+            "location": loc_info['loc'],
             "status": "健康（略感疲憊）",
-            "comprehension": 9,   # 悟性
-            "fortune": 8,         # 福緣
-            "charm": 10,          # 魅力 (吸引桃花)
-            "righteousness": 10,  # 正氣
-            "evil_aura": 0,       # 煞氣
-            "fame": 1             # 威名
+            "comprehension": comprehension, # 悟性
+            "fortune": fortune,             # 福緣
+            "charm": charm,                 # 魅力
+            "righteousness": 10,            # 正氣
+            "evil_aura": 0,                 # 煞氣
+            "fame": 1                       # 威名
         },
         "inventory": [
-            {"name": "掃靈帚", "count": 1, "desc": "打掃仙園落花用的普通法器。"},
+            {"name": "掃靈帚", "count": 1, "desc": "打掃或幹雜活用的普通工具。"},
             {"name": "下品仙露", "count": 2, "desc": "仙界最普通的飲品，補充 20 點飽腹度與少量靈力。"},
-            {"name": "神秘玉佩", "count": 1, "desc": "從小隨身攜帶的殘破玉佩，散發著微弱的古老氣息。"}
+            special_item
         ],
         "npcs": {
             "清虛仙尊·墨白": {
                 "identity": "仙界第一劍尊 / 高冷禁慾",
                 "affinity": 15,
                 "relationship": "遙不可及的雲端仙尊（對你有一絲微弱的既視感）",
-                "key_memory": "曾在仙園遠遠看過你一眼，眼神似乎停頓了片刻。"
+                "key_memory": "曾在遠處遠遠看過你一眼，眼神似乎停頓了片刻。"
             }
         },
-        "story_history": [f"你睜開眼睛，發現自己正身處仙界最底層的雜役司，手裡握著掃靈帚。雖然只是個名叫【{player_name}】的仙界小薯，但你心中總覺得自己不該止步於此……"]
+        "story_history": [
+            f"【開局隨機生成成功！】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
+            f"雖然你只是個名叫【{player_name}】的仙界小薯（{loc_info['bg']}），"
+            f"但你不知道的是，你的體內竟隱藏著【{bloodline}】！命運的齒輪已開始轉動……"
+        ]
     }
     st.session_state.current_options = [
-        "拿起掃靈帚開始認命打掃仙園",
-        "悄悄拿出殘破玉佩研究上面的古老印記",
-        "偷懶溜去仙園深處看能不能碰碰運氣"
+        "認命開始做今天的雜務工作",
+        f"悄悄研究背包裡的【{special_item['name']}】",
+        "環顧四周，看看有沒有什麼奇遇或可疑的人"
     ]
     st.session_state.game_started = True
 
@@ -75,8 +111,8 @@ SYSTEM_INSTRUCTION = """
 你是一個高品質的【仙俠 RPG 遊戲主持人（GM）】，擅長豐富的情感細節與細膩的情愛動態。
 
 【玩家背景設定】：
-- 玩家表面上是仙界最底層的雜役仙侍（仙界小薯），但身世極其特殊（隱藏著震撼三界的遠古血脈或神秘過往）。
-- 請在劇情中適時埋下關於「神秘身世/血脈覺醒」的伏筆與線索。
+- 玩家表面上是仙界最底層的仙界小薯，但每次開局都有獨特的隨機地點與隱藏身世/血脈。
+- 請根據玩家目前的 `location`（地點）與 `bloodline`（血脈）演繹專屬劇情，並適時埋下關於「身世覺醒」的伏筆與線索。
 
 【💖 感情與好感度系統】：
 - 玩家會遇到各種不同魅力的角色（如高冷仙尊、腹黑魔君、傲嬌妖皇、溫柔師兄等）。
@@ -160,17 +196,16 @@ def process_turn(player_action):
         st.error(f"劇情生成失敗：{str(e)}")
 
 # ---------------------------------------------------------
-# 5. UI 介面（開局問名 + 手機優化 + 存檔功能）
+# 5. UI 介面（隨機開局 + 手機優化 + 存檔功能）
 # ---------------------------------------------------------
 st.title("🌸 三界奇譚：仙界小薯逆襲記")
 
-# 若尚未開始遊戲，顯示【輸入姓名】與【讀取存檔】畫面
 if not st.session_state.game_started:
-    st.subheader("✨ 踏入仙途")
+    st.subheader("🎲 踏入仙途 (隨機命格開局)")
     
     with st.form("start_game_form"):
-        input_name = st.text_input("請輸入你在仙界的名字：", value="司柔")
-        submit_btn = st.form_submit_button("開啟仙途 🚀", use_container_width=True)
+        input_name = st.text_input("請輸入你在仙界的名字：", value="詩柔")
+        submit_btn = st.form_submit_button("🎲 抽取命格，開啟新人生 🚀", use_container_width=True)
         if submit_btn:
             init_game(input_name)
             st.rerun()
@@ -193,7 +228,13 @@ if not st.session_state.game_started:
             st.warning("請先輸入存檔代碼！")
 
 else:
-    # 遊戲主要介面 (分頁)
+    # 頂部快捷選單：重開新遊戲
+    col_title, col_reset = st.columns([3, 1])
+    with col_reset:
+        if st.button("🎲 重開新局", use_container_width=True):
+            st.session_state.game_started = False
+            st.rerun()
+
     tab_story, tab_status, tab_inv, tab_romance, tab_save = st.tabs(["📖 劇情", "👤 狀態", "🎒 背包", "💖 姻緣好感", "💾 存檔/讀檔"])
 
     # --- 頁籤 1：主線劇情 ---
@@ -205,7 +246,6 @@ else:
                 st.write(text)
 
         st.markdown("---")
-        
         st.write("✨ **請選擇你的行動：**")
         for opt in st.session_state.current_options:
             if st.button(opt, key=opt, use_container_width=True):
@@ -213,7 +253,7 @@ else:
                 st.rerun()
 
         st.markdown("---")
-        custom_act = st.text_input("💬 自由意念（例：嘗試向清虛仙尊搭話 / 使用下品仙露）：")
+        custom_act = st.text_input("💬 自由意念（例：嘗試觀察四周 / 打開背包檢查物品）：")
         if st.button("發送自訂行動", use_container_width=True):
             if custom_act.strip():
                 process_turn(custom_act.strip())
@@ -224,7 +264,7 @@ else:
         p = st.session_state.game_state["player"]
         st.subheader(f"👤 {p['name']}")
         st.write(f"**身份**：{p['identity']}")
-        st.write(f"**血脈身世**：{p['bloodline']}")
+        st.write(f"**隱藏血脈**：{p['bloodline']}")
         st.write(f"**當前境界**：{p['realm']}")
         st.write(f"**當前位置**：📍 {p['location']}")
         
@@ -263,16 +303,15 @@ else:
     # --- 頁籤 5：存檔與讀檔 ---
     with tab_save:
         st.subheader("💾 遊戲存檔與讀檔")
-        st.info("💡 只要將「存檔代碼」複製並儲存在手機的備忘錄裡，下次重新開啟遊戲時貼上即可繼續進度！")
+        st.info("💡 只要將「存檔代碼」複製並儲存在手機備忘錄裡，下次重新開啟遊戲時貼上即可繼續進度！")
         
-        # 匯出存檔
         save_data = {
             "game_state": st.session_state.game_state,
             "current_options": st.session_state.current_options
         }
         save_string = json.dumps(save_data, ensure_ascii=False)
         
-        st.write("📋 **你的當前存檔代碼（點擊框框全選複製）：**")
+        st.write("📋 **你的當前存檔代碼：**")
         st.code(save_string, language="text")
         
         st.markdown("---")
