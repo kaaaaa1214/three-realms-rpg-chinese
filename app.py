@@ -211,9 +211,9 @@ if not st.session_state.game_started:
             except Exception as err:
                 st.error("存檔代碼無效！")
 else:
-    # 📌 【左側邊欄】：固定精簡的即時狀態總覽 + 功能切換按鈕
+    # 📌 【左側邊欄】：永駐固定面板（包含完整數值與畫面切換）
     with st.sidebar:
-        st.header("📌 仙途導航")
+        st.header("📌 仙途導航與狀態")
         p = st.session_state.game_state["player"]
         st.write(f"👤 **{p['name']}**")
         st.write(f"🏷️ 境界：{p['realm']}")
@@ -224,10 +224,14 @@ else:
         col2.metric("💙 MP", p["mp"])
         st.metric("🍚 飽腹", p["fullness"])
 
+        # 🌟 把完整數值（悟性、福緣、魅力、正道、煞氣、威名）放回左側固定顯示！
+        with st.expander("📊 詳細屬性數據", expanded=True):
+            st.write(f"🧠 悟性：{p['comprehension']} | 🎲 福緣：{p['fortune']} | ✨ 魅力：{p['charm']}")
+            st.write(f"⚖️ 正氣：{p['righteousness']} | 🩸 煞氣：{p['evil_aura']} | 👑 威名：{p['fame']}")
+
         st.markdown("---")
         st.subheader("🗂️ 畫面檢視切換")
         
-        # 用 session_state 記住目前選擇要看哪個大畫面
         if "active_tab" not in st.session_state:
             st.session_state.active_tab = "📖 主線劇情"
 
@@ -250,7 +254,7 @@ else:
             st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
 
-    # 🖥️ 【中央主畫面】：根據左側切換的狀態，把內容完整展開在寬敞的中間畫面，易讀好看！
+    # 🖥️ 【中央主畫面】
     current_view = st.session_state.get("active_tab", "📖 主線劇情")
 
     if current_view == "📖 主線劇情":
