@@ -31,7 +31,7 @@ client = genai.Client(api_key=api_key)
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
 
-# 隨機池設定
+# 隨機開局地點與身份
 LOCATIONS = [
     {"loc": "仙界·凌霄外園雜役司", "identity": "九霄雲宮雜役仙侍", "bg": "每天負責打掃仙園落花，是仙界最底層的小薯。"},
     {"loc": "仙界·洗髓池畔殘垣", "identity": "無依無靠的洗髓池棄兒", "bg": "從小被拋棄在仙界洗髓池邊，靠撿拾廢棄仙草長大。"},
@@ -39,7 +39,8 @@ LOCATIONS = [
     {"loc": "仙界·神兵鍛造坊後山", "identity": "打鐵小工奴侍", "bg": "在仙界鍛造坊幹粗活，整天與仙火碎石打交道。"}
 ]
 
-BLOODLINES = [
+# 隨機隱藏血脈/身世 (GM 知道，但玩家狀態頁面不直接顯示)
+SECRET_BLOODLINES = [
     "鳳凰涅槃血脈（未覺醒：體內隱隱有金黑色涅槃火光流轉）",
     "鴻蒙神魔同體印（未覺醒：左眼偶爾閃過魔氣，右眼透出仙光）",
     "太古星辰仙帝遺脈（封印中：眉心隱藏著一枚殘破的星辰印記）",
@@ -55,10 +56,10 @@ SPECIAL_ITEMS = [
 
 def init_game(player_name):
     loc_info = random.choice(LOCATIONS)
-    bloodline = random.choice(BLOODLINES)
+    secret_bloodline = random.choice(SECRET_BLOODLINES)
     special_item = random.choice(SPECIAL_ITEMS)
     
-    # 隨機微調初始屬性
+    # 隨機微調初始基礎屬性
     comprehension = random.randint(8, 12)
     fortune = random.randint(8, 12)
     charm = random.randint(8, 12)
@@ -67,78 +68,83 @@ def init_game(player_name):
         "player": {
             "name": player_name if player_name.strip() else "詩柔",
             "identity": f"{loc_info['loc']}·{loc_info['identity']}",
-            "bloodline": bloodline,
+            "secret_bloodline": secret_bloodline, # 隱藏身世，僅供 AI 參考
             "hp": "100/100",
             "mp": "30/30",
             "fullness": "90/100",
             "realm": "微末小仙 / 煉氣初期",
             "location": loc_info['loc'],
-            "status": "健康（略感疲憊）",
+            "status": "健康（平靜）",
             "comprehension": comprehension, # 悟性
             "fortune": fortune,             # 福緣
             "charm": charm,                 # 魅力
-            "righteousness": 10,            # 正氣
-            "evil_aura": 0,                 # 煞氣
-            "fame": 1                       # 威名
+            "righteousness": 0,             # 正氣 (初始0)
+            "evil_aura": 0,                 # 煞氣 (初始0)
+            "fame": 0                       # 威名 (初始0)
         },
         "inventory": [
             {"name": "掃靈帚", "count": 1, "desc": "打掃或幹雜活用的普通工具。"},
             {"name": "下品仙露", "count": 2, "desc": "仙界最普通的飲品，補充 20 點飽腹度與少量靈力。"},
             special_item
         ],
-        "npcs": {
-            "清虛仙尊·墨白": {
-                "identity": "仙界第一劍尊 / 高冷禁慾",
-                "affinity": 15,
-                "relationship": "遙不可及的雲端仙尊（對你有一絲微弱的既視感）",
-                "key_memory": "曾在遠處遠遠看過你一眼，眼神似乎停頓了片刻。"
-            }
-        },
+        "npcs": {}, # 初始完全沒有任何 NPC 或感情線
         "story_history": [
-            f"【開局隨機生成成功！】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
-            f"雖然你只是個名叫【{player_name}】的仙界小薯（{loc_info['bg']}），"
-            f"但你不知道的是，你的體內竟隱藏著【{bloodline}】！命運的齒輪已開始轉動……"
+            f"【仙途開啟】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
+            f"你是【{player_name}】，目前只是一個平凡的{loc_info['identity']}（{loc_info['bg']}）。\n"
+            f"浩瀚三界，無窮玄秘，屬於你的逆襲仙途正式展開……"
         ]
     }
     st.session_state.current_options = [
-        "認命開始做今天的雜務工作",
-        f"悄悄研究背包裡的【{special_item['name']}】",
-        "環顧四周，看看有沒有什麼奇遇或可疑的人"
+        "🧹 踏實幹活：開始做今天的日常雜務",
+        f"🔍 仔細端詳：拿出背包裡的【{special_item['name']}】認真研究",
+        "👀 四處探索：觀察周圍環境，看看有沒有值得注意的事物",
+        "🧘 靜心打坐：嘗試運轉呼吸吐納，感受天地間微弱的靈氣",
+        "💬 試探互動：向身邊路過的其他仙官或雜役打招呼套近乎"
     ]
     st.session_state.game_started = True
 
 SYSTEM_INSTRUCTION = """
-你是一個高品質的【仙俠 RPG 遊戲主持人（GM）】，擅長豐富的情感細節與細膩的情愛動態。
+你是一個高品質的【仙俠 RPG 遊戲主持人（GM）】。
 
-【玩家背景設定】：
-- 玩家表面上是仙界最底層的仙界小薯，但每次開局都有獨特的隨機地點與隱藏身世/血脈。
-- 請根據玩家目前的 `location`（地點）與 `bloodline`（血脈）演繹專屬劇情，並適時埋下關於「身世覺醒」的伏筆與線索。
+【玩家背景與隱藏設定】：
+- 玩家開局是一個普通底層小薯。
+- 玩家有一個隱藏身世/血脈記錄在 `secret_bloodline` 中。
+- ⚠️ **重要規則**：切勿在剛開局就直接公開或說明隱藏身世！必須隨著劇情推進、遭遇奇遇、危急時刻或修為突破時，才通過細節描寫（如異象、神秘感應）逐步引導覺醒。
 
-【💖 感情與好感度系統】：
-- 玩家會遇到各種不同魅力的角色（如高冷仙尊、腹黑魔君、傲嬌妖皇、溫柔師兄等）。
-- 每次互動若涉及情感動向，請在 `npc_updates` 中更新好感度（affinity, 0-100+）與關係描述（relationship，如：萍水相逢、暗生情愫、曖昧期、情根深種、生死相許）。
-- 劇情文字要寫得出情感拉扯、甜虐細節與沉浸感！
+【🎯 選項生成規則（重點）】：
+- 每次必須生成 **4 到 5 個** 不同的行動選項。
+- 選項必須涵蓋 **多種不同類型**，例如：
+  1. 穩健/日常（打雜、修煉、恢復、觀望）
+  2. 冒險/探索（調查異象、前往未知區域、觸發奇遇）
+  3. 社交/互動（打聽消息、交好他人、請教前輩、反抗欺壓）
+  4. 智取/機敏（使用背包物品、尋找破綻、設下陷阱、暗中觀察）
+  5. 出人意料/大膽嘗試（獨特嘗試、冒險一搏）
+- 請在每個選項前加上合適的 Emoji 標情符號（如 🗡️, 📜, 🌸, 🧘, 🎒），增加可讀性。
+
+【NPC 與關係系統】：
+- 初始 NPC 列表為空。
+- 當玩家在劇情中遇到新人物（如同伴、朋友、前輩、師長、敵人或潛在對象）時，才將其加入 `npc_updates`。
+- `affinity` 為好感/敬意值（0-100）。`relationship` 應準確反映當前關係（如：陌生路人、嚴厲的前輩、有恩的同伴、微妙的對頭等，讓關係自然發展）。
 
 【輸出格式規則】：
 必須嚴格回傳標準 JSON（切勿包含任何多餘文字）：
 {
-  "story": "詳細劇情演繹（250字以內），文筆唯美有沉浸感，包含心動或冒險細節。",
-  "options": ["選項1", "選項2", "選項3"],
+  "story": "詳細劇情演繹（250字以內），文筆生動流暢，注重氛圍感。",
+  "options": ["選項1（4-5個不同類型的選項，帶Emoji）", "選項2", "選項3", "選項4", "選項5"],
   "player_update": {
     "identity": "身份描述",
-    "bloodline": "身世/血脈狀態",
     "hp": "100/100",
     "mp": "30/30",
     "fullness": "85/100",
     "realm": "當前境界",
     "location": "當前地點",
     "status": "當前狀態",
-    "comprehension": 9,
-    "fortune": 8,
+    "comprehension": 10,
+    "fortune": 10,
     "charm": 10,
-    "righteousness": 10,
+    "righteousness": 0,
     "evil_aura": 0,
-    "fame": 1
+    "fame": 0
   },
   "inventory_update": [
     {"name": "物品名", "count": 1, "desc": "說明"}
@@ -147,9 +153,9 @@ SYSTEM_INSTRUCTION = """
     {
       "name": "角色名稱",
       "identity": "身份背景",
-      "affinity": 25,
-      "relationship": "情感關係狀態",
-      "key_memory": "重要情感記憶/互動摘要"
+      "affinity": 10,
+      "relationship": "關係狀態（如：點頭之交、嚴厲前輩、同門朋友等）",
+      "key_memory": "互動印象摘要"
     }
   ]
 }
@@ -163,7 +169,7 @@ def process_turn(player_action):
     
     prompt = f"當前主角狀態：{json.dumps(game_state['player'], ensure_ascii=False)}\n"
     prompt += f"當前背包：{json.dumps(game_state['inventory'], ensure_ascii=False)}\n"
-    prompt += f"當前人物好感與關係：{json.dumps(game_state['npcs'], ensure_ascii=False)}\n"
+    prompt += f"當前已結識人物：{json.dumps(game_state['npcs'], ensure_ascii=False)}\n"
     prompt += f"玩家採取的行動：{player_action}\n"
     prompt += "請回傳 JSON 劇情演繹與數據更新。"
 
@@ -178,12 +184,14 @@ def process_turn(player_action):
         )
         data = json.loads(response.text)
 
-        # 更新狀態
+        # 更新玩家狀態
         game_state["player"].update(data.get("player_update", {}))
         
+        # 更新背包
         if "inventory_update" in data:
             game_state["inventory"] = [i for i in data["inventory_update"] if i.get("count", 0) > 0]
 
+        # 更新或新增 NPC
         for npc in data.get("npc_updates", []):
             game_state["npcs"][npc["name"]] = npc
 
@@ -196,7 +204,7 @@ def process_turn(player_action):
         st.error(f"劇情生成失敗：{str(e)}")
 
 # ---------------------------------------------------------
-# 5. UI 介面（隨機開局 + 手機優化 + 存檔功能）
+# 5. UI 介面
 # ---------------------------------------------------------
 st.title("🌸 三界奇譚：仙界小薯逆襲記")
 
@@ -205,7 +213,7 @@ if not st.session_state.game_started:
     
     with st.form("start_game_form"):
         input_name = st.text_input("請輸入你在仙界的名字：", value="詩柔")
-        submit_btn = st.form_submit_button("🎲 抽取命格，開啟新人生 🚀", use_container_width=True)
+        submit_btn = st.form_submit_button("🎲 開啟新人生 🚀", use_container_width=True)
         if submit_btn:
             init_game(input_name)
             st.rerun()
@@ -228,14 +236,14 @@ if not st.session_state.game_started:
             st.warning("請先輸入存檔代碼！")
 
 else:
-    # 頂部快捷選單：重開新遊戲
+    # 頂部快捷選單
     col_title, col_reset = st.columns([3, 1])
     with col_reset:
         if st.button("🎲 重開新局", use_container_width=True):
             st.session_state.game_started = False
             st.rerun()
 
-    tab_story, tab_status, tab_inv, tab_romance, tab_save = st.tabs(["📖 劇情", "👤 狀態", "🎒 背包", "💖 姻緣好感", "💾 存檔/讀檔"])
+    tab_story, tab_status, tab_inv, tab_romance, tab_save = st.tabs(["📖 劇情", "👤 狀態", "🎒 背包", "👥 三界人物", "💾 存檔/讀檔"])
 
     # --- 頁籤 1：主線劇情 ---
     with tab_story:
@@ -259,14 +267,14 @@ else:
                 process_turn(custom_act.strip())
                 st.rerun()
 
-    # --- 頁籤 2：主角狀態與身世 ---
+    # --- 頁籤 2：主角狀態 ---
     with tab_status:
         p = st.session_state.game_state["player"]
         st.subheader(f"👤 {p['name']}")
         st.write(f"**身份**：{p['identity']}")
-        st.write(f"**隱藏血脈**：{p['bloodline']}")
         st.write(f"**當前境界**：{p['realm']}")
         st.write(f"**當前位置**：📍 {p['location']}")
+        st.write(f"**狀態**：{p['status']}")
         
         col1, col2, col3 = st.columns(3)
         col1.metric("❤️ HP", p["hp"])
@@ -287,18 +295,18 @@ else:
             for item in inv:
                 st.success(f"**【{item['name']}】 x {item['count']}**\n\n說明：{item['desc']}")
 
-    # --- 頁籤 4：姻緣與好感度 ---
+    # --- 頁籤 4：三界人物誌 ---
     with tab_romance:
-        st.subheader("💖 三界人物誌與好感度")
+        st.subheader("👥 三界人物誌")
         npcs = st.session_state.game_state["npcs"]
         if not npcs:
-            st.write("目前尚未結交任何仙魔角色。")
+            st.info("目前尚未結識任何仙魔角色、師長或同伴。漫漫仙途，等待你的探索！")
         else:
             for name, info in npcs.items():
-                with st.expander(f"🌸 {name}（好感度：{info['affinity']}）", expanded=True):
+                with st.expander(f"🌸 {name}（好感/敬意：{info['affinity']}）", expanded=True):
                     st.write(f"**身份**：{info['identity']}")
-                    st.write(f"**情感狀態**：💕 {info['relationship']}")
-                    st.write(f"**心動記憶**：{info['key_memory']}")
+                    st.write(f"**關係**：🤝 {info['relationship']}")
+                    st.write(f"**印象關鍵**：{info['key_memory']}")
 
     # --- 頁籤 5：存檔與讀檔 ---
     with tab_save:
