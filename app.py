@@ -165,9 +165,9 @@ def process_turn(player_action):
     prompt += f"玩家採取的行動：{player_action}\n"
     prompt += "請回傳 JSON 劇情演繹與數據更新。"
 
-    # 使用 spinner 提示載入中
     with st.spinner("🔮 AI 正在演繹仙途劇情，請稍候..."):
         try:
+            # 這裡已修正為正確的模型名稱 gemini-2.5-flash
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=prompt,
@@ -177,7 +177,6 @@ def process_turn(player_action):
                 )
             )
             
-            # 清理可能的 markdown 標記
             clean_text = response.text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
 
@@ -233,7 +232,6 @@ if not st.session_state.game_started:
             st.warning("請先輸入存檔代碼！")
 
 else:
-    # 頂部快捷選單
     col_title, col_reset = st.columns([3, 1])
     with col_reset:
         if st.button("🎲 重開新局", use_container_width=True):
@@ -253,7 +251,6 @@ else:
         st.markdown("---")
         st.write("✨ **請選擇你的行動：**")
         
-        # 繪製選項按鈕
         for idx, opt in enumerate(st.session_state.current_options):
             if st.button(opt, key=f"opt_{idx}", use_container_width=True):
                 process_turn(opt)
