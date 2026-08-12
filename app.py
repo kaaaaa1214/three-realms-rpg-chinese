@@ -161,7 +161,6 @@ def process_turn(player_action):
     with st.status("🔮 Groq 引擎急速運轉中，正在生成劇情與結算...", expanded=True) as status:
         try:
             st.write("正在呼叫 Groq 模型 (llama-3.3-70b-versatile)...")
-            # 將 temperature 調高至 0.9，大幅增加多樣性與隨機性，防止內容重複
             response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
@@ -299,11 +298,16 @@ else:
                 st.rerun()
 
         st.markdown("---")
-        custom_act = st.text_input("💬 自由意念輸入：", key="custom_input")
-        if st.button("發送自訂行動", use_container_width=True):
-            if custom_act.strip():
-                process_turn(custom_act.strip())
-                st.rerun()
+        
+        # 定義回調函數以在送出後清空輸入框
+        def handle_custom_action():
+            val = st.session_state.custom_input.strip()
+            if val:
+                process_turn(val)
+                st.session_state.custom_input = ""  # 清空輸入框
+
+        st.text_input("💬 自由意念輸入：", key="custom_input")
+        st.button("發送自訂行動", use_container_width=True, on_click=handle_custom_action)
 
     elif current_view == "🎒 我的背包":
         st.subheader("🎒 我的背包物品欄")
