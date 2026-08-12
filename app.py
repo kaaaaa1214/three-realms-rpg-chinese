@@ -169,7 +169,7 @@ if not st.session_state.game_started:
     st.subheader("✨ 踏入仙途")
     
     with st.form("start_game_form"):
-        input_name = st.text_input("請輸入你在仙界的名字：", value="陳一慧")
+        input_name = st.text_input("請輸入你在仙界的名字：", value="詩柔")
         submit_btn = st.form_submit_button("開啟仙途 🚀", use_container_width=True)
         if submit_btn:
             init_game(input_name)
