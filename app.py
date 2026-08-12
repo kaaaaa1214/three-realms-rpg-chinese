@@ -31,7 +31,6 @@ client = genai.Client(api_key=api_key)
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
 
-# 隨機開局地點與身份
 LOCATIONS = [
     {"loc": "仙界·凌霄外園雜役司", "identity": "九霄雲宮雜役仙侍", "bg": "每天負責打掃仙園落花，是仙界最底層的小薯。"},
     {"loc": "仙界·洗髓池畔殘垣", "identity": "無依無靠的洗髓池棄兒", "bg": "從小被拋棄在仙界洗髓池邊，靠撿拾廢棄仙草長大。"},
@@ -39,7 +38,6 @@ LOCATIONS = [
     {"loc": "仙界·神兵鍛造坊後山", "identity": "打鐵小工奴侍", "bg": "在仙界鍛造坊幹粗活，整天與仙火碎石打交道。"}
 ]
 
-# 隨機隱藏血脈/身世 (GM 知道，但玩家狀態頁面不直接顯示)
 SECRET_BLOODLINES = [
     "鳳凰涅槃血脈（未覺醒：體內隱隱有金黑色涅槃火光流轉）",
     "鴻蒙神魔同體印（未覺醒：左眼偶爾閃過魔氣，右眼透出仙光）",
@@ -59,7 +57,6 @@ def init_game(player_name):
     secret_bloodline = random.choice(SECRET_BLOODLINES)
     special_item = random.choice(SPECIAL_ITEMS)
     
-    # 隨機微調初始基礎屬性
     comprehension = random.randint(8, 12)
     fortune = random.randint(8, 12)
     charm = random.randint(8, 12)
@@ -68,26 +65,26 @@ def init_game(player_name):
         "player": {
             "name": player_name if player_name.strip() else "詩柔",
             "identity": f"{loc_info['loc']}·{loc_info['identity']}",
-            "secret_bloodline": secret_bloodline, # 隱藏身世，僅供 AI 參考
+            "secret_bloodline": secret_bloodline,
             "hp": "100/100",
             "mp": "30/30",
             "fullness": "90/100",
             "realm": "微末小仙 / 煉氣初期",
             "location": loc_info['loc'],
             "status": "健康（平靜）",
-            "comprehension": comprehension, # 悟性
-            "fortune": fortune,             # 福緣
-            "charm": charm,                 # 魅力
-            "righteousness": 0,             # 正氣 (初始0)
-            "evil_aura": 0,                 # 煞氣 (初始0)
-            "fame": 0                       # 威名 (初始0)
+            "comprehension": comprehension,
+            "fortune": fortune,
+            "charm": charm,
+            "righteousness": 0,
+            "evil_aura": 0,
+            "fame": 0
         },
         "inventory": [
             {"name": "掃靈帚", "count": 1, "desc": "打掃或幹雜活用的普通工具。"},
             {"name": "下品仙露", "count": 2, "desc": "仙界最普通的飲品，補充 20 點飽腹度與少量靈力。"},
             special_item
         ],
-        "npcs": {}, # 初始完全沒有任何 NPC 或感情線
+        "npcs": {},
         "story_history": [
             f"【仙途開啟】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
             f"你是【{player_name}】，目前只是一個平凡的{loc_info['identity']}（{loc_info['bg']}）。\n"
@@ -111,26 +108,21 @@ SYSTEM_INSTRUCTION = """
 - 玩家有一個隱藏身世/血脈記錄在 `secret_bloodline` 中。
 - ⚠️ **重要規則**：切勿在剛開局就直接公開或說明隱藏身世！必須隨著劇情推進、遭遇奇遇、危急時刻或修為突破時，才通過細節描寫（如異象、神秘感應）逐步引導覺醒。
 
-【🎯 選項生成規則（重點）】：
+【🎯 選項生成規則】：
 - 每次必須生成 **4 到 5 個** 不同的行動選項。
-- 選項必須涵蓋 **多種不同類型**，例如：
-  1. 穩健/日常（打雜、修煉、恢復、觀望）
-  2. 冒險/探索（調查異象、前往未知區域、觸發奇遇）
-  3. 社交/互動（打聽消息、交好他人、請教前輩、反抗欺壓）
-  4. 智取/機敏（使用背包物品、尋找破綻、設下陷阱、暗中觀察）
-  5. 出人意料/大膽嘗試（獨特嘗試、冒險一搏）
-- 請在每個選項前加上合適的 Emoji 標情符號（如 🗡️, 📜, 🌸, 🧘, 🎒），增加可讀性。
+- 選項必須涵蓋多種不同類型（穩健日常、冒險探索、社交互動、智取機敏、出人意料嘗試）。
+- 請在每個選項前加上合適的 Emoji 標情符號（如 🗡️, 📜, 🌸, 🧘, 🎒）。
 
 【NPC 與關係系統】：
 - 初始 NPC 列表為空。
 - 當玩家在劇情中遇到新人物（如同伴、朋友、前輩、師長、敵人或潛在對象）時，才將其加入 `npc_updates`。
-- `affinity` 為好感/敬意值（0-100）。`relationship` 應準確反映當前關係（如：陌生路人、嚴厲的前輩、有恩的同伴、微妙的對頭等，讓關係自然發展）。
+- `affinity` 為好感/敬意值（0-100）。`relationship` 應準確反映當前關係，讓關係自然發展。
 
 【輸出格式規則】：
 必須嚴格回傳標準 JSON（切勿包含任何多餘文字）：
 {
   "story": "詳細劇情演繹（250字以內），文筆生動流暢，注重氛圍感。",
-  "options": ["選項1（4-5個不同類型的選項，帶Emoji）", "選項2", "選項3", "選項4", "選項5"],
+  "options": ["選項1", "選項2", "選項3", "選項4", "選項5"],
   "player_update": {
     "identity": "身份描述",
     "hp": "100/100",
@@ -154,7 +146,7 @@ SYSTEM_INSTRUCTION = """
       "name": "角色名稱",
       "identity": "身份背景",
       "affinity": 10,
-      "relationship": "關係狀態（如：點頭之交、嚴厲前輩、同門朋友等）",
+      "relationship": "關係狀態",
       "key_memory": "互動印象摘要"
     }
   ]
@@ -173,35 +165,40 @@ def process_turn(player_action):
     prompt += f"玩家採取的行動：{player_action}\n"
     prompt += "請回傳 JSON 劇情演繹與數據更新。"
 
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                response_mime_type="application/json"
+    # 使用 spinner 提示載入中
+    with st.spinner("🔮 AI 正在演繹仙途劇情，請稍候..."):
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    response_mime_type="application/json"
+                )
             )
-        )
-        data = json.loads(response.text)
+            
+            # 清理可能的 markdown 標記
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean_text)
 
-        # 更新玩家狀態
-        game_state["player"].update(data.get("player_update", {}))
-        
-        # 更新背包
-        if "inventory_update" in data:
-            game_state["inventory"] = [i for i in data["inventory_update"] if i.get("count", 0) > 0]
+            # 更新玩家狀態
+            game_state["player"].update(data.get("player_update", {}))
+            
+            # 更新背包
+            if "inventory_update" in data:
+                game_state["inventory"] = [i for i in data["inventory_update"] if i.get("count", 0) > 0]
 
-        # 更新或新增 NPC
-        for npc in data.get("npc_updates", []):
-            game_state["npcs"][npc["name"]] = npc
+            # 更新或新增 NPC
+            for npc in data.get("npc_updates", []):
+                game_state["npcs"][npc["name"]] = npc
 
-        # 紀錄歷史
-        game_state["story_history"].append(f"👉 **你選擇了**：{player_action}")
-        game_state["story_history"].append(data["story"])
-        st.session_state.current_options = data.get("options", [])
+            # 紀錄歷史
+            game_state["story_history"].append(f"👉 **你選擇了**：{player_action}")
+            game_state["story_history"].append(data["story"])
+            st.session_state.current_options = data.get("options", [])
 
-    except Exception as e:
-        st.error(f"劇情生成失敗：{str(e)}")
+        except Exception as e:
+            st.error(f"劇情生成失敗，請再按一次選項試試看！錯誤原因：{str(e)}")
 
 # ---------------------------------------------------------
 # 5. UI 介面
@@ -255,13 +252,15 @@ else:
 
         st.markdown("---")
         st.write("✨ **請選擇你的行動：**")
-        for opt in st.session_state.current_options:
-            if st.button(opt, key=opt, use_container_width=True):
+        
+        # 繪製選項按鈕
+        for idx, opt in enumerate(st.session_state.current_options):
+            if st.button(opt, key=f"opt_{idx}", use_container_width=True):
                 process_turn(opt)
                 st.rerun()
 
         st.markdown("---")
-        custom_act = st.text_input("💬 自由意念（例：嘗試觀察四周 / 打開背包檢查物品）：")
+        custom_act = st.text_input("💬 自由意念（例：嘗試觀察四周 / 打開背包檢查物品）：", key="custom_input")
         if st.button("發送自訂行動", use_container_width=True):
             if custom_act.strip():
                 process_turn(custom_act.strip())
