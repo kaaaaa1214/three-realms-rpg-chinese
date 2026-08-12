@@ -157,9 +157,9 @@ def process_turn(player_action):
     with st.status("🔮 命運齒輪轉動中，AI 正在生成劇情...", expanded=True) as status:
         try:
             st.write("正在呼叫 Gemini 模型...")
-            # 💡 改用支援的 gemini-2.0-flash 標準模型
+            # 💡 更新為目前穩定支援的 gemini-3.5-flash 模型
             response = client.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-3.5-flash',
                 contents=prompt
             )
             raw_text = response.text
