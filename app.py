@@ -1,7 +1,7 @@
 import json
 import random
 import streamlit as st
-from google import genai
+from groq import Groq
 
 # ---------------------------------------------------------
 # 1. 頁面設定 (支援手機與寬螢幕佈局)
@@ -14,15 +14,16 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 2. 初始化 Gemini API Key (從 Streamlit Secrets 讀取)
+# 2. 初始化 Groq API Client (從 Streamlit Secrets 讀取)
 # ---------------------------------------------------------
-api_key = st.secrets.get("GEMINI_API_KEY", "")
+api_key = st.secrets.get("GROQ_API_KEY", "")
 
 if not api_key:
-    st.error("⚠️ 請在 Streamlit Secrets 中設定 GEMINI_API_KEY！")
+    st.error("⚠️ 請在 Streamlit Secrets 中設定 GROQ_API_KEY！")
     st.stop()
 
-client = genai.Client(api_key=api_key)
+# 初始化 Groq 客戶端
+client = Groq(api_key=api_key)
 
 # ---------------------------------------------------------
 # 3. 三界多元開局庫 (白手起家 + 狀態結算提示)
@@ -154,14 +155,20 @@ def process_turn(player_action):
     prompt += f"玩家採取的最新行動：{player_action}\n"
     prompt += "請嚴格回傳純 JSON 格式數據。"
 
-    with st.status("🔮 命運齒輪轉動中，AI 正在生成劇情與結算...", expanded=True) as status:
+    with st.status("🔮 Groq 引擎急速運轉中，正在生成劇情與結算...", expanded=True) as status:
         try:
-            st.write("正在呼叫 Gemini 模型...")
-            response = client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=prompt
+            st.write("正在呼叫 Groq 模型 (llama-3.3-70b-versatile)...")
+            # 使用 Groq 的聊天補全介面
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": SYSTEM_INSTRUCTION},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"}
             )
-            raw_text = response.text
+            raw_text = response.choices[0].message.content
             st.write("資料解析中...")
             
             clean_text = raw_text.replace("```json", "").replace("```", "").strip()
