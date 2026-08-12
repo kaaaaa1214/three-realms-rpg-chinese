@@ -4,13 +4,13 @@ import streamlit as st
 from google import genai
 
 # ---------------------------------------------------------
-# 1. 頁面設定 (適合手機瀏覽)
+# 1. 頁面設定 (寬螢幕佈局，完美支援側邊欄固定)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="三界奇譚：仙界小薯逆襲記",
     page_icon="🌸",
-    layout="wide", # 改為寬螢幕佈局，更適合側邊欄設計
-    initial_sidebar_state="expanded" # 預設展開側邊欄固定狀態
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # ---------------------------------------------------------
@@ -183,7 +183,7 @@ def process_turn(player_action):
             st.error(f"劇情生成失敗，請再試一次！錯誤原因：\n{str(e)}")
 
 # ---------------------------------------------------------
-# 5. UI 介面配置
+# 4. UI 介面配置
 # ---------------------------------------------------------
 st.title("🌸 三界奇譚：仙界小薯逆襲記")
 
@@ -204,91 +204,99 @@ if not st.session_state.game_started:
             try:
                 loaded_data = json.loads(load_code.strip())
                 st.session_state.game_state = loaded_data.get("game_state", {})
-                st.session_state.current_options = loaded_data.get("current_options", [])
+                st.session_state.current_options = loaded_data.get("current_options", {})
                 st.session_state.game_started = True
                 st.success("讀取存檔成功！")
                 st.rerun()
             except Exception as err:
                 st.error("存檔代碼無效！")
 else:
-    # 📌 【固定側邊欄】：無論主畫面點到哪裡或捲動多長，左側狀態永遠固定不動！
+    # 📌 【固定側邊欄】：將狀態、背包、人物誌、存檔全部集中在左側固定面板
     with st.sidebar:
-        st.subheader("📌 仙途即時狀態")
-        p = st.session_state.game_state["player"]
-        st.write(f"👤 **{p['name']}**")
-        st.write(f"🏷️ **境界**：{p['realm']}")
-        st.write(f"📍 **位置**：{p['location']}")
-        st.write(f"🩺 **狀態**：{p['status']}")
+        st.header("📌 仙途控制與狀態台")
         
-        st.markdown("---")
-        st.metric("❤️ 生命 (HP)", p["hp"])
-        st.metric("💙 靈力 (MP)", p["mp"])
-        st.metric("🍚 飽腹度", p["fullness"])
-        
-        st.markdown("---")
-        with st.expander("📊 詳細屬性檢視"):
-            st.write(f"🧠 悟性：{p['comprehension']}")
-            st.write(f"🎲 福緣：{p['fortune']}")
-            st.write(f"✨ 魅力：{p['charm']}")
-            st.write(f"⚖️ 正氣：{p['righteousness']}")
-            st.write(f"🩸 煞氣：{p['evil_aura']}")
-            st.write(f"👑 威名：{p['fame']}")
+        # 1. 角色基本狀態
+        with st.expander("👤 主角即時狀態", expanded=True):
+            p = st.session_state.game_state["player"]
+            st.write(f"**名字**：{p['name']}")
+            st.write(f"**境界**：{p['realm']}")
+            st.write(f"**位置**：📍 {p['location']}")
+            st.write(f"**狀態**：{p['status']}")
             
+            col1, col2 = st.columns(2)
+            col1.metric("❤️ HP", p["hp"])
+            col2.metric("💙 MP", p["mp"])
+            st.metric("🍚 飽腹度", p["fullness"])
+            
+            st.markdown("---")
+            st.write(f"🧠 悟性：{p['comprehension']} | 🎲 福緣：{p['fortune']} | ✨ 魅力：{p['charm']}")
+            st.write(f"⚖️ 正氣：{p['righteousness']} | 🩸 煞氣：{p['evil_aura']} | 👑 威名：{p['fame']}")
+
+        # 2. 背包物品
+        with st.expander("🎒 我的背包", expanded=False):
+            inv = st.session_state.game_state["inventory"]
+            if not inv:
+                st.write("背包空空如也。")
+            else:
+                for item in inv:
+                    st.success(f"**【{item['name']}】x{item['count']}**\n{item['desc']}")
+
+        # 3. 三界人物誌
+        with st.expander("👥 三界人物關係", expanded=False):
+            npcs = st.session_state.game_state["npcs"]
+            if not npcs:
+                st.info("尚未結識任何角色。")
+            else:
+                for name, info in npcs.items():
+                    st.write(f"**🌸 {name}**（好感: {info['affinity']}）")
+                    st.write(f"關係：{info['relationship']}")
+                    st.markdown("---")
+
+        # 4. 存檔與讀檔
+        with st.expander("💾 遊戲存檔與讀檔", expanded=False):
+            save_data = {
+                "game_state": st.session_state.game_state,
+                "current_options": st.session_state.current_options
+            }
+            save_string = json.dumps(save_data, ensure_ascii=False)
+            st.text_area("📋 當前存檔代碼（複製保存）：", value=save_string, height=100, key="sidebar_save_box")
+            
+            in_load_code = st.text_area("📥 貼上存檔代碼讀取：", key="sidebar_load_box")
+            if st.button("載入存檔 🔄", use_container_width=True):
+                if in_load_code.strip():
+                    try:
+                        loaded = json.loads(in_load_code.strip())
+                        st.session_state.game_state = loaded.get("game_state", {})
+                        st.session_state.current_options = loaded.get("current_options", [])
+                        st.success("存檔載入成功！")
+                        st.rerun()
+                    except Exception as err:
+                        st.error("存檔代碼格式錯誤！")
+
         st.markdown("---")
         if st.button("🎲 重開新局", use_container_width=True):
             st.session_state.game_started = False
             st.rerun()
 
-    # 主畫面的分頁（專注於劇情、背包、人物與存檔）
-    tab_story, tab_inv, tab_romance, tab_save = st.tabs(["📖 主線劇情", "🎒 我的背包", "👥 三界人物", "💾 存檔與讀檔"])
-
-    with tab_story:
-        for text in st.session_state.game_state["story_history"]:
-            if text.startswith("👉"):
-                st.info(text)
-            else:
-                st.write(text)
-
-        st.markdown("---")
-        st.write("✨ **請選擇你的行動：**")
-        
-        for idx, opt in enumerate(st.session_state.current_options):
-            if st.button(opt, key=f"opt_{idx}", use_container_width=True):
-                process_turn(opt)
-                st.rerun()
-
-        st.markdown("---")
-        custom_act = st.text_input("💬 自由意念輸入：", key="custom_input")
-        if st.button("發送自訂行動", use_container_width=True):
-            if custom_act.strip():
-                process_turn(custom_act.strip())
-                st.rerun()
-
-    with tab_inv:
-        st.subheader("🎒 我的背包")
-        inv = st.session_state.game_state["inventory"]
-        if not inv:
-            st.write("背包空空如也。")
+    # 📖 【主畫面】：專心留給長長的劇情與互動選項
+    st.subheader("📖 主線劇情與冒險")
+    
+    for text in st.session_state.game_state["story_history"]:
+        if text.startswith("👉"):
+            st.info(text)
         else:
-            for item in inv:
-                st.success(f"**【{item['name']}】 x {item['count']}**\n\n說明：{item['desc']}")
+            st.write(text)
 
-    with tab_romance:
-        st.subheader("👥 三界人物誌")
-        npcs = st.session_state.game_state["npcs"]
-        if not npcs:
-            st.info("目前尚未結識任何仙魔角色或同伴。")
-        else:
-            for name, info in npcs.items():
-                with st.expander(f"🌸 {name}（好感：{info['affinity']}）", expanded=True):
-                    st.write(f"**身份**：{info['identity']}")
-                    st.write(f"**關係**：🤝 {info['relationship']}")
-                    st.write(f"**印象關鍵**：{info['key_memory']}")
+    st.markdown("---")
+    st.write("✨ **請選擇你的行動：**")
+    
+    for idx, opt in enumerate(st.session_state.current_options):
+        if st.button(opt, key=f"opt_{idx}", use_container_width=True):
+            process_turn(opt)
+            st.rerun()
 
-    with tab_save:
-        st.subheader("💾 遊戲存檔與讀檔")
-        save_data = {
-            "game_state": st.session_state.game_state,
-            "current_options": st.session_state.current_options
-        }
-        st.code(json.dumps(save_data, ensure_ascii=False), language="text")
+    st.markdown("---")
+    custom_act = st.text_input("💬 自由意念輸入：", key="custom_input")
+    if st.button("發送自訂行動", use_container_width=True):
+        if custom_act.strip():
+            process_turn(custom_act.strip())
