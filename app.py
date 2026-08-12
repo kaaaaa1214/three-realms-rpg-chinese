@@ -110,10 +110,10 @@ SYSTEM_INSTRUCTION = """
 【🎯 選項生成核心規則（極度重要）】：
 - 每次必須生成 4 個不同的行動選項。
 - **選項風格必須模仿高級武俠/仙俠小說的沉浸式對白與心態描寫**（參考：「你沒有立刻答話，而是……」、「你抬眸望向……語氣篤定……」、「你沒有急著回應，目光落在……」）。
-- 每個選項開頭必須是數字編號（如 `1`, `2`, `3`, `4`），後面緊接著細膩的動作、試探或對白，絕不能只是單純的短動詞（如「去打工」、「拿武器」）。
+- 每個選項開頭必須是數字編號（如 `1`, `2`, `3`, `4`），後面緊接著細膩的動作、試探或對白。
 
 【輸出格式規則】：
-必須嚴格回傳標準 JSON（切勿包含任何多餘文字）：
+必須嚴格回傳標準 JSON（切勿包含任何額外文字或 markdown 程式碼區塊標記，直接回傳純 JSON 字串）：
 {
   "story": "詳細精彩的劇情演繹（250字以內），文筆生動，推進劇情。",
   "story_summary_update": "請把『過往劇情摘要』與『本次最新發生的關鍵劇情』融合，更新成一段 80 字以內的精簡歷史摘要，讓下一輪 AI 能掌握全貌。",
@@ -165,15 +165,18 @@ def process_turn(player_action):
     prompt += f"當前背包：{json.dumps(game_state['inventory'], ensure_ascii=False)}\n"
     prompt += f"當前已結識人物：{json.dumps(game_state['npcs'], ensure_ascii=False)}\n"
     prompt += f"玩家採取的最新行動：{player_action}\n"
-    prompt += "請嚴格回傳 JSON 格式數據，確保選項風格完全符合武俠沉浸式對白。"
+    prompt += "請嚴格回傳純 JSON 格式數據。"
 
     with st.spinner("🔮 命運齒輪轉動中，AI 正在生成劇情..."):
         try:
-            interaction = client.interactions.create(
-                model='gemini-3.6-flash',
-                input=prompt
+            # 💡 修正為標準且穩定的 generate_content 呼叫方式
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
             )
-            raw_text = interaction.output_text
+            raw_text = response.text
+            
+            # 清理可能夾雜的 markdown 標記
             clean_text = raw_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
 
@@ -190,10 +193,15 @@ def process_turn(player_action):
 
             game_state["story_history"].append(f"👉 **你選擇了**：{player_action}")
             game_state["story_history"].append(data["story"])
-            st.session_state.current_options = data.get("options", [])
+            st.session_state.current_options = data.get("options", [
+                "1 繼續冷靜觀察四周，尋找下一個突破口。",
+                "2 嘗試開口詢問身旁的人，探聽更多內幕消息。",
+                "3 悄悄檢查身上的隨身物品，看看有沒有隱藏的線索。",
+                "4 找個安全的地方暫避風頭，默默運氣調息。"
+            ])
 
         except Exception as e:
-            st.error(f"劇情生成失敗，請再試一次！錯誤原因：\n{str(e)}")
+            st.error(f"劇情生成失敗！請檢查網絡或重試。錯誤詳情：\n{str(e)}")
 
 # ---------------------------------------------------------
 # 4. UI 介面配置
