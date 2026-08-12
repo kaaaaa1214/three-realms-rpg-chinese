@@ -25,7 +25,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. 三界多元開局庫 (白手起家 + 自然融入金錢)
+# 3. 三界多元開局庫 (支援每回合四項資源動態消耗結算)
 # ---------------------------------------------------------
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
@@ -59,9 +59,12 @@ def init_game(player_name):
             "identity": f"{loc_info['loc']}·{loc_info['identity']}",
             "secret_bloodline": hidden_bloodline,
             "bloodline_awakened": False,
-            "hp": "100/100",
-            "mp": "30/30",
-            "fullness": "90/100",
+            "hp": 100,
+            "max_hp": 100,
+            "mp": 30,
+            "max_mp": 30,
+            "fullness": 90,
+            "max_fullness": 100,
             "money": 5, # 初始微薄銅板
             "realm": "凡俗之軀 / 煉氣期一層",
             "location": loc_info['loc'],
@@ -79,32 +82,32 @@ def init_game(player_name):
         ],
         "npcs": {},
         "story_history": [
-            f"【命運開啟】\n你睜開發現自己正身處在**{loc_info['loc']}**。\n"
+            f"【命運開啟】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
             f"你是【{player_name}】，身上僅剩下微薄的 **5文錢**，目前只是一個平凡無奇的{loc_info['identity']}（{loc_info['bg']}）。\n"
-            f"身無長物，萬事開頭難。茫茫三界，弱肉強食，屬於你的白手起家逆襲之路正式展開……"
+            f"身無長物，萬事開頭難。每次行動皆會消耗體力、飽腹或伴隨開銷，請謹慎規劃你的每一步！"
         ],
-        "story_summary": "遊戲白手起家開局，主角身懷5文錢，正處於命運起點，等待發掘機緣。"
+        "story_summary": "遊戲白手起家開局，主角身懷5文錢與基礎狀態，正處於命運起點。"
     }
     st.session_state.current_options = [
-        "1 既沒有立刻搭話，也沒有亂動，而是冷眼旁觀周圍的動靜，試圖從中找出對自己最有利的生存破局契機。",
-        "2 沒有急著怨天尤人，而是默默觀察周遭環境，看看有沒有被遺棄的有用雜物或能落腳的地方。",
-        "3 微微挑眉，語氣平淡卻帶著一絲冷靜：「與其在這裡盲目瞎忙，不如先弄清楚這裡的規矩與幕後掌權者。」",
-        "4 沒有將心思放在眼前的困境上，反而若有所思地觀察四周，尋找一個可以避開耳目偷偷修煉或尋找機緣的角落。"
+        "1 既沒有立刻搭話，也沒有亂動，而是冷眼旁觀周圍的動靜，試圖找出破局契機。",
+        "2 沒有急著怨天尤人，而是默默觀察周遭環境，看看有沒有被遺棄的有用雜物。",
+        "3 微微挑眉，語氣平淡卻帶著一絲冷靜，先弄清楚這裡的規矩與掌權者。",
+        "4 沒有將心思放在眼前困境，找一個可以避開耳目偷偷調息修煉的角落。"
     ]
     st.session_state.game_started = True
 
 SYSTEM_INSTRUCTION = """
 你是一個高品質且節奏明快的【三界跨界 RPG 遊戲主持人（GM）】。
 
-【核心原則：多元沉浸與自然觸發金錢】：
-- 玩家開局是一個毫無背景的普通底層小薯，擁有 `money` 錢包。
-- **金錢與買賣的出現頻率**：**切勿讓每個選項都和錢有關**。金錢、賺錢（執、搶、幫人、打工）或消費買賣只需在**合理的特定劇情契機**（例如走進市集、遇到商人、遇到乞討或需要報酬的委託）才自然觸發。大部分時候應專注於劇情推進、對話、修煉、危機應對與探索。
-- 玩家身上有一個隱藏的 `secret_bloodline`。在 `bloodline_awakened` 為 false 時絕對不能明講，需透過危機、奇遇或探索漸進覺醒（覺醒時設為 true）。
-- 玩家開局沒有任何外掛神器，所有的道具、功法、機緣都必須透過玩家的每一次選擇、探索、與 NPC 互動中靠自己發掘。
+【核心原則：每回合狀態動態扣除與平衡】：
+- 玩家每一次採取行動，**必須在 `player_update` 中精確結算並更新血量 (`hp`)、法力 (`mp`)、飽腹度 (`fullness`) 以及金錢 (`money`)**。
+- 根據玩家的行動內容（例如：勞動、受傷、消耗體力、吃東西補充、花錢買物資或賺錢），合理增減數值（例如日常消耗飽腹度 -5 至 -10；若受傷則扣 hp；若花錢則扣 money）。
+- **金錢與買賣的出現頻率**：切勿讓每個選項都和錢有關，只需在合理的特定劇情契機自然觸發。
+- 玩家身上有一個隱藏的 `secret_bloodline`。在 `bloodline_awakened` 為 false 時絕對不能明講，需透過危機、奇遇或探索漸進覺醒。
 
 【🎯 選項生成核心規則（極度重要）】：
 - 每次必須生成 4 個不同的行動選項。
-- **選項風格必須模仿高級武俠/仙俠小說的沉浸式對白與心態描寫**（涵蓋觀察、交涉、冒險、低調修煉等多元風格，僅在適當時機穿插與金錢/交易相關的選項）。
+- 選項風格必須模仿高級武俠/仙俠小說的沉浸式對白與心態描寫。
 - 每個選項開頭必須是數字編號（如 `1`, `2`, `3`, `4`）。
 
 【輸出格式規則】：
@@ -119,7 +122,8 @@ SYSTEM_INSTRUCTION = """
     "4 具體且充滿張力的選項描述..."
   ],
   "player_update": {
-    "identity": "身份描述", "bloodline_awakened": false, "hp": "100/100", "mp": "30/30", "fullness": "85/100", "money": 5,
+    "identity": "身份描述", "bloodline_awakened": false, 
+    "hp": 95, "max_hp": 100, "mp": 30, "max_mp": 30, "fullness": 80, "max_fullness": 100, "money": 5,
     "realm": "當前境界", "location": "當前地點", "status": "當前狀態",
     "comprehension": 10, "fortune": 10, "charm": 10,
     "righteousness": 0, "evil_aura": 0, "fame": 0
@@ -149,7 +153,7 @@ def process_turn(player_action):
     prompt += f"玩家採取的最新行動：{player_action}\n"
     prompt += "請嚴格回傳純 JSON 格式數據。"
 
-    with st.status("🔮 命運齒輪轉動中，AI 正在生成劇情...", expanded=True) as status:
+    with st.status("🔮 命運齒輪轉動中，AI 正在結算回合消耗...", expanded=True) as status:
         try:
             st.write("正在呼叫 Gemini 模型...")
             response = client.models.generate_content(
@@ -181,9 +185,9 @@ def process_turn(player_action):
                 "3 找個安靜隱蔽的角落，默默調息體內的氣機。",
                 "4 檢查隨身攜帶的物品與周遭環境，看看有沒有遺漏的線索。"
             ])
-            status.update(label="✨ 劇情生成完畢！", state="complete", expanded=False)
+            status.update(label="✨ 回合結算完畢！", state="complete", expanded=False)
         except Exception as e:
-            status.update(label="❌ 劇情生成失敗", state="error", expanded=True)
+            status.update(label="❌ 回合結算失敗", state="error", expanded=True)
             st.error(f"錯誤詳情：\n{str(e)}")
 
 # ---------------------------------------------------------
@@ -215,20 +219,20 @@ if not st.session_state.game_started:
             except Exception as err:
                 st.error("存檔代碼無效！")
 else:
-    # 📌 【左側邊欄】完整狀態與導航（含錢包）
+    # 📌 【左側邊欄】每回合即時更新狀態與數值
     with st.sidebar:
-        st.header("📌 逆襲導航與狀態")
+        st.header("📌 逆襲導航與即時狀態")
         p = st.session_state.game_state["player"]
         st.write(f"👤 **{p['name']}**")
         st.write(f"🏷️ 境界：{p['realm']}")
         st.write(f"📍 位置：{p['location']}")
         
         col1, col2 = st.columns(2)
-        col1.metric("❤️ HP", p["hp"])
-        col2.metric("💙 MP", p["mp"])
+        col1.metric("❤️ HP", f"{p['hp']}/{p.get('max_hp', 100)}")
+        col2.metric("💙 MP", f"{p['mp']}/{p.get('max_mp', 30)}")
         
         col3, col4 = st.columns(2)
-        col3.metric("🍚 飽腹", p["fullness"])
+        col3.metric("🍚 飽腹", f"{p['fullness']}/{p.get('max_fullness', 100)}")
         col4.metric("💰 金錢", f"{p.get('money', 0)} 文")
 
         with st.expander("📊 詳細屬性數據", expanded=True):
@@ -276,7 +280,7 @@ else:
                 st.write(text)
 
         st.markdown("---")
-        st.write("✨ **請選擇你的行動：**")
+        st.write("✨ **請選擇你的行動（每次行動將自動結算數值消耗）：**")
         
         for idx, opt in enumerate(st.session_state.current_options):
             if st.button(opt, key=f"opt_{idx}_{len(st.session_state.game_state['story_history'])}", use_container_width=True):
