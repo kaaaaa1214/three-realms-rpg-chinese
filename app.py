@@ -169,14 +169,13 @@ def process_turn(player_action):
 
     with st.spinner("🔮 命運齒輪轉動中，AI 正在生成劇情..."):
         try:
-            # 💡 修正為標準且穩定的 generate_content 呼叫方式
+            # 💡 已更新為穩定支援的 gemini-2.0-flash 模型
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.0-flash',
                 contents=prompt
             )
             raw_text = response.text
             
-            # 清理可能夾雜的 markdown 標記
             clean_text = raw_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
 
