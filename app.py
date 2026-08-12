@@ -22,7 +22,6 @@ if not api_key:
     st.error("⚠️ 請在 Streamlit Secrets 中設定 GROQ_API_KEY！")
     st.stop()
 
-# 初始化 Groq 客戶端
 client = Groq(api_key=api_key)
 
 # ---------------------------------------------------------
@@ -95,23 +94,27 @@ def init_game(player_name):
     st.session_state.game_started = True
 
 SYSTEM_INSTRUCTION = """
-你是一個高品質且節奏明快的【三界跨界 RPG 遊戲主持人（GM）】。
+你是一個高品質、富含戲劇性且節奏明快的【三界跨界 RPG 遊戲主持人（GM）】。
 
-【核心原則：多元沉浸與動態狀態結算】：
+【核心原則：拒絕重複與極致多樣化】：
+- 絕對禁止重複使用相似的劇情套路、對白或怪物。每一幕都必須有全新的環境轉折、突發危機或機遇。
 - 玩家開局是一個毫無背景的普通底層小薯，擁有 `money` 錢包。
 - **金錢與買賣的出現頻率**：切勿讓每個選項都和錢有關。金錢、賺錢或消費買賣只需在合理的特定劇情契機（例如走進市集、遇到商人、遇到乞討或需要報酬的委託）才自然觸發。大部分時候應專注於劇情推進、對話、修煉、危機應對與探索。
-- 玩家身上有一個隱藏的 `secret_bloodline`。在 `bloodline_awakened` 為 false 時絕對不能明講，需透過危機、奇遇或探索漸進覺醒（覺醒時設為 true）。
-- 玩家開局沒有任何外掛神器，所有的道具、功法、機緣都必須透過玩家的每一次選擇、探索、與 NPC 互動中靠自己發掘。
+- 玩家身上有一個隱藏的 `secret_bloodline`。在 `bloodline_awakened` 為 false 時絕對不能明講，需透過危機、奇遇或探索漸進覺醒。
+
+【🎯 選項生成核心規則（防止單調，極度重要）】：
+- 每次必須生成 4 個**截然不同走向**的行動選項：
+  - 選項 1：傾向「正面剛、積極進取、冒險突圍或正面對決」。
+  - 選項 2：傾向「智取、暗中觀察、尋找漏洞、佈局或利用環境」。
+  - 選項 3：傾向「謹慎保守、尋求避難、儲存實力、修煉調息或搜刮物資」。
+  - 選項 4：傾向「兵行險招、特異獨行、試探神祕禁忌或激進賭博」。
+- 4個選項的內容與句型必須極度豐富多變，絕對不能千篇一律。
+- 每個選項開頭必須是數字編號（如 `1`, `2`, `3`, `4`）。
 
 【結算提示格式要求】：
 - 在 `story` 欄位的最結尾處，必須加上一行明確的數值結算提示，格式固定為：
   `\n\n【結算：HP-X、MP-X、饑餓-X、錢-X】`
-  （請根據玩家本次行動所造成的實際數值消耗或獲得來填寫數值，例如：`【結算：HP-0、MP-0、饑餓-5、錢+2】` 或 `【結算：HP-10、MP-0、饑餓-10、錢-0】` 等）。
-
-【🎯 選項生成核心規則（極度重要）】：
-- 每次必須生成 4 個不同的行動選項。
-- 選項風格必須模仿高級武俠/仙俠小說的沉浸式對白與心態描寫。
-- 每個選項開頭必須是數字編號（如 `1`, `2`, `3`, `4`）。
+  （請根據玩家本次行動所造成的實際數值消耗或獲得來填寫數值）。
 
 【輸出格式規則】：
 必須嚴格回傳標準 JSON（切勿包含任何額外文字或 markdown 程式碼區塊標記，直接回傳純 JSON 字串）：
@@ -158,14 +161,14 @@ def process_turn(player_action):
     with st.status("🔮 Groq 引擎急速運轉中，正在生成劇情與結算...", expanded=True) as status:
         try:
             st.write("正在呼叫 Groq 模型 (llama-3.3-70b-versatile)...")
-            # 使用 Groq 的聊天補全介面
+            # 將 temperature 調高至 0.9，大幅增加多樣性與隨機性，防止內容重複
             response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": SYSTEM_INSTRUCTION},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=0.9,
                 response_format={"type": "json_object"}
             )
             raw_text = response.choices[0].message.content
