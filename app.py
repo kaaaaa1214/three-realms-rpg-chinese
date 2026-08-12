@@ -87,7 +87,7 @@ def init_game(player_name):
         "npcs": {},
         "story_history": [
             f"【仙途開啟】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
-            f"你是【{player_name}】，目前只是一個平凡的{loc_info['identity']}（{loc_info['bg']}）。\n"
+            f"你是【{player_name}】，目前只是一個補充的{loc_info['identity']}（{loc_info['bg']}）。\n"
             f"浩瀚三界，無窮玄秘，屬於你的逆襲仙途正式展開……"
         ]
     }
@@ -167,8 +167,9 @@ def process_turn(player_action):
 
     with st.spinner("🔮 AI 正在演繹仙途劇情，請稍候..."):
         try:
+            # 使用官方 SDK 標準支援的模型 gemini-2.0-flash
             response = client.models.generate_content(
-                model='gemini-1.5-flash',
+                model='gemini-2.0-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
