@@ -4,10 +4,10 @@ import streamlit as st
 from google import genai
 
 # ---------------------------------------------------------
-# 1. 頁面設定 (寬螢幕佈局，完美支援側邊欄固定)
+# 1. 頁面設定 (支援手機與寬螢幕佈局)
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="三界奇譚：仙界小薯逆襲記",
+    page_title="三界奇譚：小薯逆襲記",
     page_icon="🌸",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,30 +25,31 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. 隨機開局庫與初始化遊戲狀態
+# 3. 三界多元開局庫 (不侷限於仙界)
 # ---------------------------------------------------------
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
 
 LOCATIONS = [
-    {"loc": "仙界·凌霄外園雜役司", "identity": "九霄雲宮雜役仙侍", "bg": "每天負責打掃仙園落花，是仙界最底層的小薯。"},
-    {"loc": "仙界·洗髓池畔殘垣", "identity": "無依無靠的洗髓池棄兒", "bg": "從小被拋棄在仙界洗髓池邊，靠撿拾廢棄仙草長大。"},
-    {"loc": "仙界·荒古藥園角落", "identity": "藥王谷看守藥童", "bg": "每天負責照料珍稀仙草，經常被仙官差遣打雜。"},
-    {"loc": "仙界·神兵鍛造坊後山", "identity": "打鐵小工奴侍", "bg": "在仙界鍛造坊幹粗活，整天與仙火碎石打交道。"}
+    {"loc": "凡間·青石鎮落魄流民所", "identity": "街頭乞討的孤苦孤兒", "bg": "父母雙亡，每日為下一頓飯發愁，卻在市井中看盡人情冷暖。"},
+    {"loc": "仙界·凌霄外園雜役司", "identity": "九霄雲宮最底層雜役仙侍", "bg": "每天負責打掃仙園落花，是仙界最卑微的小薯。"},
+    {"loc": "妖界·萬妖山脈外圍暗谷", "identity": "靈智未開就被放養的半妖奴隸", "bg": "混血身份在妖界備受排擠，只能在強大妖獸的爪下艱難求生。"},
+    {"loc": "魔界·黑焰深淵礦區", "identity": "最低賤的魔鐵礦奴工", "bg": "每日承受著魔氣侵蝕與監工皮鞭，過著見不到明天的日子。"},
+    {"loc": "靈界·散修坊市散亂破廟", "identity": "擺地攤維生的底層落魄散修", "bg": "靈根低下，功法殘缺，經常被強買強賣的修仙家族欺壓。"}
 ]
 
 SECRET_BLOODLINES = [
     "鳳凰涅槃血脈（未覺醒：體內隱隱有金黑色涅槃火光流轉）",
     "鴻蒙神魔同體印（未覺醒：左眼偶爾閃過魔氣，右眼透出仙光）",
-    "太古星辰仙帝遺脈（封印中：眉心隱藏著一枚殘破的星辰印記）",
-    "九幽妖皇真靈寄宿（沉睡中：胸口處生有一枚古老的妖族聖紋）"
+    "太古星辰帝君遺脈（封印中：眉心隱藏著一枚殘破的星辰印記）",
+    "九幽妖皇真靈寄宿（沉睡中：胸口處生有一枚古老的上古妖聖紋）"
 ]
 
 SPECIAL_ITEMS = [
     {"name": "殘破玉佩", "count": 1, "desc": "從小隨身攜帶的殘破玉佩，散發著微弱的古老氣息。"},
     {"name": "無字天書殘頁", "count": 1, "desc": "在廢墟中撿到的古舊紙頁，隱隱有文字流轉。"},
-    {"name": "鏽蝕仙劍", "count": 1, "desc": "看似一把普通廢鐵劍，卻能在深夜發出陣陣劍鳴。"},
-    {"name": "神秘獸牙", "count": 1, "desc": "散發著淡淡野性威壓的獸牙佩飾。"}
+    {"name": "鏽蝕鐵劍", "count": 1, "desc": "看似一把普通廢鐵劍，卻能在深夜發出陣陣異響。"},
+    {"name": "神秘獸牙", "count": 1, "desc": "散發著淡淡野性威壓的遠古獸牙佩飾。"}
 ]
 
 def init_game(player_name):
@@ -68,7 +69,7 @@ def init_game(player_name):
             "hp": "100/100",
             "mp": "30/30",
             "fullness": "90/100",
-            "realm": "微末小仙 / 煉氣初期",
+            "realm": "凡俗之軀 / 煉氣期一層",
             "location": loc_info['loc'],
             "status": "健康（平靜）",
             "comprehension": comprehension,
@@ -79,37 +80,37 @@ def init_game(player_name):
             "fame": 0
         },
         "inventory": [
-            {"name": "掃靈帚", "count": 1, "desc": "打掃或幹雜活用的普通工具。"},
-            {"name": "下品仙露", "count": 2, "desc": "仙界最普通的飲品，補充 20 點飽腹度與少量靈力。"},
+            {"name": "粗布麻衣", "count": 1, "desc": "極為普通的日常衣物。"},
+            {"name": "乾糧清水", "count": 2, "desc": "填飽肚子的普通補給，補充少量飽腹度。"},
             special_item
         ],
         "npcs": {},
         "story_history": [
-            f"【仙途開啟】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
+            f"【命運開啟】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
             f"你是【{player_name}】，目前只是一個平凡的{loc_info['identity']}（{loc_info['bg']}）。\n"
-            f"浩瀚三界，無窮玄秘，屬於你的逆襲仙途正式展開……"
+            f"茫茫三界，弱肉強食，屬於你的小薯逆襲之路正式展開……"
         ]
     }
     st.session_state.current_options = [
-        "🧹 踏實幹活：開始做今天的日常雜務",
-        f"🔍 仔細端詳：拿出背包裡的【{special_item['name']}】認真研究",
-        "👀 四處探索：觀察周圍環境，看看有沒有值得注意的事物",
-        "🧘 靜心打坐：嘗試運轉呼吸吐納，感受天地間微弱的靈氣",
-        "💬 試探互動：向身邊路過的其他仙官或雜役打招呼套近乎"
+        "🧹 踏實幹活：安分守己地完成眼前的雜務與生存勞動",
+        f"🔍 仔細端詳：拿出隨身攜帶的【{special_item['name']}】秘密研究",
+        "👀 四處探索：觀察周圍環境，尋找可以改變現狀的機會",
+        "🧘 靜心調息：嘗試感悟天地氣息，默默運轉微弱的吐納法門",
+        "💬 試探互動：向周圍熟悉或路過的人物打招呼，套取情報"
     ]
     st.session_state.game_started = True
 
 SYSTEM_INSTRUCTION = """
-你是一個高品質的【仙俠 RPG 遊戲主持人（GM）】。
+你是一個高品質的【三界跨界 RPG 遊戲主持人（GM）】。
 
 【玩家背景與隱藏設定】：
-- 玩家開局是一個普通底層小薯。
+- 玩家開局是一個普通底層小薯（可能在凡間、仙界、妖界、魔界或靈界）。
 - 玩家有一個隱藏身世/血脈記錄在 `secret_bloodline` 中。
 - ⚠️ **重要規則**：切勿在剛開局就直接公開或說明隱藏身世！必須隨著劇情推進、遭遇奇遇、危急時刻或修為突破時，才通過細節描寫逐步引導覺醒。
 
 【🎯 選項生成規則】：
 - 每次必須生成 4 到 5 個不同的行動選項。
-- 選項必須涵蓋多種不同類型（穩健日常、冒險探索、社交互動、智取機敏）。
+- 選項必須涵蓋多種不同類型（穩健生存、冒險探索、社交互動、機智應變）。
 - 請在每個選項前加上合適的 Emoji 標情符號（如 🗡️, 📜, 🌸, 🧘, 🎒）。
 
 【輸出格式規則】：
@@ -157,7 +158,7 @@ def process_turn(player_action):
     prompt += f"玩家採取的行動：{player_action}\n"
     prompt += "請嚴格回傳 JSON 格式數據。"
 
-    with st.spinner("🔮 AI 正在演繹仙途劇情，請稍候..."):
+    with st.spinner("🔮 AI 正在演繹命運劇情，請稍候..."):
         try:
             interaction = client.interactions.create(
                 model='gemini-3.6-flash',
@@ -185,13 +186,13 @@ def process_turn(player_action):
 # ---------------------------------------------------------
 # 4. UI 介面配置
 # ---------------------------------------------------------
-st.title("🌸 三界奇譚：仙界小薯逆襲記")
+st.title("🌸 三界奇譚：小薯逆襲記")
 
 if not st.session_state.game_started:
-    st.subheader("🎲 踏入仙途 (隨機命格開局)")
+    st.subheader("🎲 踏入命途 (隨機三界背景開局)")
     with st.form("start_game_form"):
-        input_name = st.text_input("請輸入你在仙界的名字：", value="詩柔")
-        submit_btn = st.form_submit_button("🎲 開啟新人生 🚀", use_container_width=True)
+        input_name = st.text_input("請輸入你的名字：", value="詩柔")
+        submit_btn = st.form_submit_button("🎲 開啟逆襲人生 🚀", use_container_width=True)
         if submit_btn:
             init_game(input_name)
             st.rerun()
@@ -211,9 +212,9 @@ if not st.session_state.game_started:
             except Exception as err:
                 st.error("存檔代碼無效！")
 else:
-    # 📌 【左側邊欄】：永駐固定面板（包含完整數值與畫面切換）
+    # 📌 【左側邊欄】：固定即時狀態面板與導航按鈕
     with st.sidebar:
-        st.header("📌 仙途導航與狀態")
+        st.header("📌 逆襲導航與狀態")
         p = st.session_state.game_state["player"]
         st.write(f"👤 **{p['name']}**")
         st.write(f"🏷️ 境界：{p['realm']}")
@@ -224,7 +225,6 @@ else:
         col2.metric("💙 MP", p["mp"])
         st.metric("🍚 飽腹", p["fullness"])
 
-        # 🌟 把完整數值（悟性、福緣、魅力、正道、煞氣、威名）放回左側固定顯示！
         with st.expander("📊 詳細屬性數據", expanded=True):
             st.write(f"🧠 悟性：{p['comprehension']} | 🎲 福緣：{p['fortune']} | ✨ 魅力：{p['charm']}")
             st.write(f"⚖️ 正氣：{p['righteousness']} | 🩸 煞氣：{p['evil_aura']} | 👑 威名：{p['fame']}")
@@ -235,6 +235,7 @@ else:
         if "active_tab" not in st.session_state:
             st.session_state.active_tab = "📖 主線劇情"
 
+        # 💡 點擊按鈕後，會自動更新頁面並重新執行，手機上點選後側邊欄會自動收起，非常順暢！
         if st.button("📖 主線劇情與冒險", use_container_width=True):
             st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
@@ -254,7 +255,7 @@ else:
             st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
 
-    # 🖥️ 【中央主畫面】
+    # 🖥️ 【中央主畫面】：根據左側切換的狀態渲染，乾淨清晰
     current_view = st.session_state.get("active_tab", "📖 主線劇情")
 
     if current_view == "📖 主線劇情":
@@ -293,7 +294,7 @@ else:
         st.subheader("👥 三界人物誌與好感度")
         npcs = st.session_state.game_state["npcs"]
         if not npcs:
-            st.info("目前尚未結識任何仙魔角色或同伴。漫漫仙途，等待你的探索！")
+            st.info("目前尚未結識任何三界角色。漫漫征途，等待你的探索！")
         else:
             for name, info in npcs.items():
                 with st.expander(f"🌸 {name}（好感/敬意：{info['affinity']}）", expanded=True):
@@ -303,6 +304,13 @@ else:
 
     elif current_view == "💾 存檔與讀檔":
         st.subheader("💾 遊戲存檔與讀檔管理")
+        
+        # 🔗 【新增】：在存檔介面加入返回劇情的按鈕
+        if st.button("⬅️ 返回主線劇情", use_container_width=True):
+            st.session_state.active_tab = "📖 主線劇情"
+            st.rerun()
+            
+        st.markdown("---")
         save_data = {
             "game_state": st.session_state.game_state,
             "current_options": st.session_state.current_options
