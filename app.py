@@ -25,12 +25,15 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. 初始化遊戲狀態 (仙界小薯 + 特殊身世 + 好感度)
+# 3. 初始化遊戲狀態 (未輸入名字前顯示開局設定)
 # ---------------------------------------------------------
-if "game_state" not in st.session_state:
+if "game_started" not in st.session_state:
+    st.session_state.game_started = False
+
+def init_game(player_name):
     st.session_state.game_state = {
         "player": {
-            "name": "陳一慧",
+            "name": player_name if player_name.strip() else "無名小仙",
             "identity": "仙界·九霄雲宮雜役仙侍（仙界小薯）",
             "bloodline": "未知（體內隱隱有金黑色遠古印記流轉，尚未覺醒）",
             "hp": "100/100",
@@ -59,8 +62,14 @@ if "game_state" not in st.session_state:
                 "key_memory": "曾在仙園遠遠看過你一眼，眼神似乎停頓了片刻。"
             }
         },
-        "story_history": ["你睜開眼睛，發現自己正身處仙界最底層的雜役司，手裡握著掃靈帚。雖然只是個仙界小薯，但你心中總覺得自己不該止步於此……"]
+        "story_history": [f"你睜開眼睛，發現自己正身處仙界最底層的雜役司，手裡握著掃靈帚。雖然只是個名叫【{player_name}】的仙界小薯，但你心中總覺得自己不該止步於此……"]
     }
+    st.session_state.current_options = [
+        "拿起掃靈帚開始認命打掃仙園",
+        "悄悄拿出殘破玉佩研究上面的古老印記",
+        "偷懶溜去仙園深處看能不能碰碰運氣"
+    ]
+    st.session_state.game_started = True
 
 SYSTEM_INSTRUCTION = """
 你是一個高品質的【仙俠 RPG 遊戲主持人（GM）】，擅長豐富的情感細節與細膩的情愛動態。
@@ -151,83 +160,133 @@ def process_turn(player_action):
         st.error(f"劇情生成失敗：{str(e)}")
 
 # ---------------------------------------------------------
-# 5. UI 介面（針對手機優化）
+# 5. UI 介面（開局問名 + 手機優化 + 存檔功能）
 # ---------------------------------------------------------
 st.title("🌸 三界奇譚：仙界小薯逆襲記")
 
-# 手機端三分頁：劇情、背包、感情線
-tab_story, tab_status, tab_inv, tab_romance = st.tabs(["📖 劇情", "👤 狀態", "🎒 背包", "💖 姻緣好感"])
+# 若尚未開始遊戲，顯示【輸入姓名】與【讀取存檔】畫面
+if not st.session_state.game_started:
+    st.subheader("✨ 踏入仙途")
+    
+    with st.form("start_game_form"):
+        input_name = st.text_input("請輸入你在仙界的名字：", value="陳一慧")
+        submit_btn = st.form_submit_button("開啟仙途 🚀", use_container_width=True)
+        if submit_btn:
+            init_game(input_name)
+            st.rerun()
 
-# --- 頁籤 1：主線劇情 ---
-with tab_story:
-    # 顯示歷史劇情
-    for text in st.session_state.game_state["story_history"]:
-        if text.startswith("👉"):
-            st.info(text)
+    st.markdown("---")
+    st.subheader("💾 讀取舊存檔")
+    load_code = st.text_area("請貼上你的存檔代碼：", key="init_load_code")
+    if st.button("讀取存檔進度 📂", use_container_width=True):
+        if load_code.strip():
+            try:
+                loaded_data = json.loads(load_code.strip())
+                st.session_state.game_state = loaded_data.get("game_state", {})
+                st.session_state.current_options = loaded_data.get("current_options", [])
+                st.session_state.game_started = True
+                st.success("讀取存檔成功！")
+                st.rerun()
+            except Exception as err:
+                st.error("存檔代碼無效，請檢查是否複製完整！")
         else:
-            st.write(text)
+            st.warning("請先輸入存檔代碼！")
 
-    st.markdown("---")
-    
-    # 第一次執行或繪製選項
-    if "current_options" not in st.session_state:
-        st.session_state.current_options = [
-            "拿起掃靈帚開始認命打掃仙園",
-            "悄悄拿出殘破玉佩研究上面的古老印記",
-            "偷懶溜去仙園深處看能不能碰碰運氣"
-        ]
+else:
+    # 遊戲主要介面 (分頁)
+    tab_story, tab_status, tab_inv, tab_romance, tab_save = st.tabs(["📖 劇情", "👤 狀態", "🎒 背包", "💖 姻緣好感", "💾 存檔/讀檔"])
 
-    st.write("✨ **請選擇你的行動：**")
-    for opt in st.session_state.current_options:
-        if st.button(opt, key=opt, use_container_width=True):
-            process_turn(opt)
-            st.rerun()
+    # --- 頁籤 1：主線劇情 ---
+    with tab_story:
+        for text in st.session_state.game_state["story_history"]:
+            if text.startswith("👉"):
+                st.info(text)
+            else:
+                st.write(text)
 
-    # 自由輸入框
-    st.markdown("---")
-    custom_act = st.text_input("💬 自由意念（例：嘗試向清虛仙尊搭話 / 使用下品仙露）：")
-    if st.button("發送自訂行動", use_container_width=True):
-        if custom_act.strip():
-            process_turn(custom_act.strip())
-            st.rerun()
+        st.markdown("---")
+        
+        st.write("✨ **請選擇你的行動：**")
+        for opt in st.session_state.current_options:
+            if st.button(opt, key=opt, use_container_width=True):
+                process_turn(opt)
+                st.rerun()
 
-# --- 頁籤 2：主角狀態與身世 ---
-with tab_status:
-    p = st.session_state.game_state["player"]
-    st.subheader(f"👤 {p['name']}")
-    st.write(f"**身份**：{p['identity']}")
-    st.write(f"**血脈身世**：{p['bloodline']}")
-    st.write(f"**當前境界**：{p['realm']}")
-    st.write(f"**當前位置**：📍 {p['location']}")
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("❤️ HP", p["hp"])
-    col2.metric("💙 MP", p["mp"])
-    col3.metric("🍚 飽腹", p["fullness"])
+        st.markdown("---")
+        custom_act = st.text_input("💬 自由意念（例：嘗試向清虛仙尊搭話 / 使用下品仙露）：")
+        if st.button("發送自訂行動", use_container_width=True):
+            if custom_act.strip():
+                process_turn(custom_act.strip())
+                st.rerun()
 
-    st.markdown("---")
-    st.write(f"🧠 **悟性**：{p['comprehension']} | 🎲 **福緣**：{p['fortune']} | ✨ **魅力**：{p['charm']}")
-    st.write(f"⚖️ **正氣**：{p['righteousness']} | 🩸 **煞氣**：{p['evil_aura']} | 👑 **威名**：{p['fame']}")
+    # --- 頁籤 2：主角狀態與身世 ---
+    with tab_status:
+        p = st.session_state.game_state["player"]
+        st.subheader(f"👤 {p['name']}")
+        st.write(f"**身份**：{p['identity']}")
+        st.write(f"**血脈身世**：{p['bloodline']}")
+        st.write(f"**當前境界**：{p['realm']}")
+        st.write(f"**當前位置**：📍 {p['location']}")
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("❤️ HP", p["hp"])
+        col2.metric("💙 MP", p["mp"])
+        col3.metric("🍚 飽腹", p["fullness"])
 
-# --- 頁籤 3：背包物品 ---
-with tab_inv:
-    st.subheader("🎒 我的背包")
-    inv = st.session_state.game_state["inventory"]
-    if not inv:
-        st.write("背包空空如也。")
-    else:
-        for item in inv:
-            st.success(f"**【{item['name']}】 x {item['count']}**\n\n說明：{item['desc']}")
+        st.markdown("---")
+        st.write(f"🧠 **悟性**：{p['comprehension']} | 🎲 **福緣**：{p['fortune']} | ✨ **魅力**：{p['charm']}")
+        st.write(f"⚖️ **正氣**：{p['righteousness']} | 🩸 **煞氣**：{p['evil_aura']} | 👑 **威名**：{p['fame']}")
 
-# --- 頁籤 4：姻緣與好感度 ---
-with tab_romance:
-    st.subheader("💖 三界人物誌與好感度")
-    npcs = st.session_state.game_state["npcs"]
-    if not npcs:
-        st.write("目前尚未結交任何仙魔角色。")
-    else:
-        for name, info in npcs.items():
-            with st.expander(f"🌸 {name}（好感度：{info['affinity']}）", expanded=True):
-                st.write(f"**身份**：{info['identity']}")
-                st.write(f"**情感狀態**：💕 {info['relationship']}")
-                st.write(f"**心動記憶**：{info['key_memory']}")
+    # --- 頁籤 3：背包物品 ---
+    with tab_inv:
+        st.subheader("🎒 我的背包")
+        inv = st.session_state.game_state["inventory"]
+        if not inv:
+            st.write("背包空空如也。")
+        else:
+            for item in inv:
+                st.success(f"**【{item['name']}】 x {item['count']}**\n\n說明：{item['desc']}")
+
+    # --- 頁籤 4：姻緣與好感度 ---
+    with tab_romance:
+        st.subheader("💖 三界人物誌與好感度")
+        npcs = st.session_state.game_state["npcs"]
+        if not npcs:
+            st.write("目前尚未結交任何仙魔角色。")
+        else:
+            for name, info in npcs.items():
+                with st.expander(f"🌸 {name}（好感度：{info['affinity']}）", expanded=True):
+                    st.write(f"**身份**：{info['identity']}")
+                    st.write(f"**情感狀態**：💕 {info['relationship']}")
+                    st.write(f"**心動記憶**：{info['key_memory']}")
+
+    # --- 頁籤 5：存檔與讀檔 ---
+    with tab_save:
+        st.subheader("💾 遊戲存檔與讀檔")
+        st.info("💡 只要將「存檔代碼」複製並儲存在手機的備忘錄裡，下次重新開啟遊戲時貼上即可繼續進度！")
+        
+        # 匯出存檔
+        save_data = {
+            "game_state": st.session_state.game_state,
+            "current_options": st.session_state.current_options
+        }
+        save_string = json.dumps(save_data, ensure_ascii=False)
+        
+        st.write("📋 **你的當前存檔代碼（點擊框框全選複製）：**")
+        st.code(save_string, language="text")
+        
+        st.markdown("---")
+        st.write("📥 **讀取新存檔：**")
+        in_load_code = st.text_area("請貼上存檔代碼：", key="in_game_load_code")
+        if st.button("載入此存檔 🔄", use_container_width=True):
+            if in_load_code.strip():
+                try:
+                    loaded = json.loads(in_load_code.strip())
+                    st.session_state.game_state = loaded.get("game_state", {})
+                    st.session_state.current_options = loaded.get("current_options", [])
+                    st.success("存檔載入成功！")
+                    st.rerun()
+                except Exception as err:
+                    st.error("存檔代碼無效，請確認格式是否正確！")
+            else:
+                st.warning("請先輸入存檔代碼！")
