@@ -2,7 +2,6 @@ import json
 import random
 import streamlit as st
 from google import genai
-from google.genai import types
 
 # ---------------------------------------------------------
 # 1. 頁面設定 (適合手機瀏覽)
@@ -110,17 +109,17 @@ SYSTEM_INSTRUCTION = """
 - ⚠️ **重要規則**：切勿在剛開局就直接公開或說明隱藏身世！必須隨著劇情推進、遭遇奇遇、危急時刻或修為突破時，才通過細節描寫（如異象、神秘感應）逐步引導覺醒。
 
 【🎯 選項生成規則】：
-- 每次必須生成 **4 到 5 個** 不同的行動選項。
+- 每次必須生成 4 到 5 個不同的行動選項。
 - 選項必須涵蓋多種不同類型（穩健日常、冒險探索、社交互動、智取機敏、出人意料嘗試）。
 - 請在每個選項前加上合適的 Emoji 標情符號（如 🗡️, 📜, 🌸, 🧘, 🎒）。
 
 【NPC 與關係系統】：
 - 初始 NPC 列表為空。
-- 當玩家在劇情中遇到新人物（如同伴、朋友、前輩、師長、敵人或潛在對象）時，才將其加入 `npc_updates`。
-- `affinity` 為好感/敬意值（0-100）。`relationship` 應準確反映當前關係，讓關係自然發展。
+- 當玩家在劇情中遇到新人物時，才將其加入 `npc_updates`。
+- `affinity` 為好感/敬意值（0-100）。`relationship` 應準確反映當前關係。
 
 【輸出格式規則】：
-必須嚴格回傳標準 JSON（切勿包含任何多餘文字）：
+必須嚴格回傳標準 JSON（切勿包含任何多餘 Markdown 包裹文字，只需 JSON 內容）：
 {
   "story": "詳細劇情演繹（250字以內），文筆生動流暢，注重氛圍感。",
   "options": ["選項1", "選項2", "選項3", "選項4", "選項5"],
@@ -155,30 +154,28 @@ SYSTEM_INSTRUCTION = """
 """
 
 # ---------------------------------------------------------
-# 4. 遊戲核心邏輯 (使用 gemini-2.0-flash)
+# 4. 遊戲核心邏輯 (使用最新的 Interactions API 與 gemini-3.6-flash)
 # ---------------------------------------------------------
 def process_turn(player_action):
     game_state = st.session_state.game_state
     
-    prompt = f"當前主角狀態：{json.dumps(game_state['player'], ensure_ascii=False)}\n"
+    prompt = f"{SYSTEM_INSTRUCTION}\n\n"
+    prompt += f"當前主角狀態：{json.dumps(game_state['player'], ensure_ascii=False)}\n"
     prompt += f"當前背包：{json.dumps(game_state['inventory'], ensure_ascii=False)}\n"
     prompt += f"當前已結識人物：{json.dumps(game_state['npcs'], ensure_ascii=False)}\n"
     prompt += f"玩家採取的行動：{player_action}\n"
-    prompt += "請回傳 JSON 劇情演繹與數據更新。"
+    prompt += "請嚴格回傳 JSON 格式數據。"
 
     with st.spinner("🔮 AI 正在演繹仙途劇情，請稍候..."):
         try:
-            # 指定 gemini-2.0-flash 模型
-            response = client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json"
-                )
+            # 使用全新的 Interactions API 介面及最新模型
+            interaction = client.interactions.create(
+                model='gemini-3.6-flash',
+                input=prompt
             )
             
-            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            raw_text = interaction.output_text
+            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
 
             # 更新玩家狀態
@@ -199,7 +196,8 @@ def process_turn(player_action):
 
         except Exception as e:
             st.error(f"劇情生成失敗，請再試一次！錯誤原因：\n{str(e)}")
-            # ---------------------------------------------------------
+
+# ---------------------------------------------------------
 # 5. UI 介面
 # ---------------------------------------------------------
 st.title("🌸 三界奇譚：仙界小薯逆襲記")
