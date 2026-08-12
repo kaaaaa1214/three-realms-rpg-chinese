@@ -177,4 +177,4 @@ def process_turn(player_action):
                 )
             )
             
-            clean_text = response.text.replace("```json", "").replace("
+clean_text = response.text.replace("```json", "").replace("```", "").strip()
