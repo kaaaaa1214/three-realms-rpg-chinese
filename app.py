@@ -204,99 +204,119 @@ if not st.session_state.game_started:
             try:
                 loaded_data = json.loads(load_code.strip())
                 st.session_state.game_state = loaded_data.get("game_state", {})
-                st.session_state.current_options = loaded_data.get("current_options", {})
+                st.session_state.current_options = loaded_data.get("current_options", [])
                 st.session_state.game_started = True
                 st.success("讀取存檔成功！")
                 st.rerun()
             except Exception as err:
                 st.error("存檔代碼無效！")
 else:
-    # 📌 【固定側邊欄】：將狀態、背包、人物誌、存檔全部集中在左側固定面板
+    # 📌 【左側邊欄】：固定精簡的即時狀態總覽 + 功能切換按鈕
     with st.sidebar:
-        st.header("📌 仙途控制與狀態台")
+        st.header("📌 仙途導航")
+        p = st.session_state.game_state["player"]
+        st.write(f"👤 **{p['name']}**")
+        st.write(f"🏷️ 境界：{p['realm']}")
+        st.write(f"📍 位置：{p['location']}")
         
-        # 1. 角色基本狀態
-        with st.expander("👤 主角即時狀態", expanded=True):
-            p = st.session_state.game_state["player"]
-            st.write(f"**名字**：{p['name']}")
-            st.write(f"**境界**：{p['realm']}")
-            st.write(f"**位置**：📍 {p['location']}")
-            st.write(f"**狀態**：{p['status']}")
-            
-            col1, col2 = st.columns(2)
-            col1.metric("❤️ HP", p["hp"])
-            col2.metric("💙 MP", p["mp"])
-            st.metric("🍚 飽腹度", p["fullness"])
-            
-            st.markdown("---")
-            st.write(f"🧠 悟性：{p['comprehension']} | 🎲 福緣：{p['fortune']} | ✨ 魅力：{p['charm']}")
-            st.write(f"⚖️ 正氣：{p['righteousness']} | 🩸 煞氣：{p['evil_aura']} | 👑 威名：{p['fame']}")
+        col1, col2 = st.columns(2)
+        col1.metric("❤️ HP", p["hp"])
+        col2.metric("💙 MP", p["mp"])
+        st.metric("🍚 飽腹", p["fullness"])
 
-        # 2. 背包物品
-        with st.expander("🎒 我的背包", expanded=False):
-            inv = st.session_state.game_state["inventory"]
-            if not inv:
-                st.write("背包空空如也。")
-            else:
-                for item in inv:
-                    st.success(f"**【{item['name']}】x{item['count']}**\n{item['desc']}")
+        st.markdown("---")
+        st.subheader("🗂️ 畫面檢視切換")
+        
+        # 用 session_state 記住目前選擇要看哪個大畫面
+        if "active_tab" not in st.session_state:
+            st.session_state.active_tab = "📖 主線劇情"
 
-        # 3. 三界人物誌
-        with st.expander("👥 三界人物關係", expanded=False):
-            npcs = st.session_state.game_state["npcs"]
-            if not npcs:
-                st.info("尚未結識任何角色。")
-            else:
-                for name, info in npcs.items():
-                    st.write(f"**🌸 {name}**（好感: {info['affinity']}）")
-                    st.write(f"關係：{info['relationship']}")
-                    st.markdown("---")
-
-        # 4. 存檔與讀檔
-        with st.expander("💾 遊戲存檔與讀檔", expanded=False):
-            save_data = {
-                "game_state": st.session_state.game_state,
-                "current_options": st.session_state.current_options
-            }
-            save_string = json.dumps(save_data, ensure_ascii=False)
-            st.text_area("📋 當前存檔代碼（複製保存）：", value=save_string, height=100, key="sidebar_save_box")
-            
-            in_load_code = st.text_area("📥 貼上存檔代碼讀取：", key="sidebar_load_box")
-            if st.button("載入存檔 🔄", use_container_width=True):
-                if in_load_code.strip():
-                    try:
-                        loaded = json.loads(in_load_code.strip())
-                        st.session_state.game_state = loaded.get("game_state", {})
-                        st.session_state.current_options = loaded.get("current_options", [])
-                        st.success("存檔載入成功！")
-                        st.rerun()
-                    except Exception as err:
-                        st.error("存檔代碼格式錯誤！")
+        if st.button("📖 主線劇情與冒險", use_container_width=True):
+            st.session_state.active_tab = "📖 主線劇情"
+            st.rerun()
+        if st.button("🎒 我的背包", use_container_width=True):
+            st.session_state.active_tab = "🎒 我的背包"
+            st.rerun()
+        if st.button("👥 三界人物關係", use_container_width=True):
+            st.session_state.active_tab = "👥 三界人物關係"
+            st.rerun()
+        if st.button("💾 存檔與讀檔", use_container_width=True):
+            st.session_state.active_tab = "💾 存檔與讀檔"
+            st.rerun()
 
         st.markdown("---")
         if st.button("🎲 重開新局", use_container_width=True):
             st.session_state.game_started = False
+            st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
 
-    # 📖 【主畫面】：專心留給長長的劇情與互動選項
-    st.subheader("📖 主線劇情與冒險")
-    
-    for text in st.session_state.game_state["story_history"]:
-        if text.startswith("👉"):
-            st.info(text)
+    # 🖥️ 【中央主畫面】：根據左側切換的狀態，把內容完整展開在寬敞的中間畫面，易讀好看！
+    current_view = st.session_state.get("active_tab", "📖 主線劇情")
+
+    if current_view == "📖 主線劇情":
+        st.subheader("📖 主線劇情與冒險")
+        for text in st.session_state.game_state["story_history"]:
+            if text.startswith("👉"):
+                st.info(text)
+            else:
+                st.write(text)
+
+        st.markdown("---")
+        st.write("✨ **請選擇你的行動：**")
+        
+        for idx, opt in enumerate(st.session_state.current_options):
+            if st.button(opt, key=f"opt_{idx}", use_container_width=True):
+                process_turn(opt)
+                st.rerun()
+
+        st.markdown("---")
+        custom_act = st.text_input("💬 自由意念輸入：", key="custom_input")
+        if st.button("發送自訂行動", use_container_width=True):
+            if custom_act.strip():
+                process_turn(custom_act.strip())
+                st.rerun()
+
+    elif current_view == "🎒 我的背包":
+        st.subheader("🎒 我的背包物品欄")
+        inv = st.session_state.game_state["inventory"]
+        if not inv:
+            st.info("背包空空如也。")
         else:
-            st.write(text)
+            for item in inv:
+                st.success(f"**【{item['name']}】 x {item['count']}**\n\n說明：{item['desc']}")
 
-    st.markdown("---")
-    st.write("✨ **請選擇你的行動：**")
-    
-    for idx, opt in enumerate(st.session_state.current_options):
-        if st.button(opt, key=f"opt_{idx}", use_container_width=True):
-            process_turn(opt)
-            st.rerun()
+    elif current_view == "👥 三界人物關係":
+        st.subheader("👥 三界人物誌與好感度")
+        npcs = st.session_state.game_state["npcs"]
+        if not npcs:
+            st.info("目前尚未結識任何仙魔角色或同伴。漫漫仙途，等待你的探索！")
+        else:
+            for name, info in npcs.items():
+                with st.expander(f"🌸 {name}（好感/敬意：{info['affinity']}）", expanded=True):
+                    st.write(f"**身份**：{info['identity']}")
+                    st.write(f"**關係**：🤝 {info['relationship']}")
+                    st.write(f"**印象關鍵**：{info['key_memory']}")
 
-    st.markdown("---")
-    custom_act = st.text_input("💬 自由意念輸入：", key="custom_input")
-    if st.button("發送自訂行動", use_container_width=True):
-        if custom_act.strip():
-            process_turn(custom_act.strip())
+    elif current_view == "💾 存檔與讀檔":
+        st.subheader("💾 遊戲存檔與讀檔管理")
+        save_data = {
+            "game_state": st.session_state.game_state,
+            "current_options": st.session_state.current_options
+        }
+        save_string = json.dumps(save_data, ensure_ascii=False)
+        st.text_area("📋 當前存檔代碼（全選複製保存）：", value=save_string, height=150, key="main_save_box")
+        
+        st.markdown("---")
+        in_load_code = st.text_area("📥 請在此貼上存檔代碼以讀取進度：", key="main_load_box")
+        if st.button("確認載入存檔 🔄", use_container_width=True):
+            if in_load_code.strip():
+                try:
+                    loaded = json.loads(in_load_code.strip())
+                    st.session_state.game_state = loaded.get("game_state", {})
+                    st.session_state.current_options = loaded.get("current_options", [])
+                    st.success("存檔載入成功！")
+                    st.rerun()
+                except Exception as err:
+                    st.error("存檔代碼格式錯誤，請檢查是否複製完整！")
+            else:
+                st.warning("請先貼上存檔代碼！")
