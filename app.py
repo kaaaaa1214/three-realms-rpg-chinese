@@ -25,7 +25,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. 三界多元開局庫 (不侷限於仙界)
+# 3. 三界多元開局庫
 # ---------------------------------------------------------
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
@@ -89,35 +89,40 @@ def init_game(player_name):
             f"【命運開啟】\n你睜開眼睛，發現自己正身處在**{loc_info['loc']}**。\n"
             f"你是【{player_name}】，目前只是一個平凡的{loc_info['identity']}（{loc_info['bg']}）。\n"
             f"茫茫三界，弱肉強食，屬於你的小薯逆襲之路正式展開……"
-        ]
+        ],
+        "story_summary": "遊戲剛開局，主角正處於命運起點，尚未經歷重大事件。"
     }
     st.session_state.current_options = [
-        "🧹 踏實幹活：安分守己地完成眼前的雜務與生存勞動",
-        f"🔍 仔細端詳：拿出隨身攜帶的【{special_item['name']}】秘密研究",
-        "👀 四處探索：觀察周圍環境，尋找可以改變現狀的機會",
-        "🧘 靜心調息：嘗試感悟天地氣息，默默運轉微弱的吐納法門",
-        "💬 試探互動：向周圍熟悉或路過的人物打招呼，套取情報"
+        "1 既沒有立刻搭話，也沒有亂動，而是冷眼旁觀周圍的動靜，試圖從中找出對自己最有利的破局契機。",
+        f"2 沒有急著回應周遭的變故，目光落在那件【{special_item['name']}】上片刻，忽然開口試探：「這東西……究竟藏著什麼秘密？」",
+        "3 微微挑眉，語氣平淡卻帶著一絲不容置疑：「與其在這裡盲目耗著，不如先弄清楚這裡究竟是什麼地方，誰才是真正話事的人。」",
+        "4 沒有將心思放在眼前的困境上，反而若有所思地環顧四周：「這地方看似平靜，恐怕暗地裡早已經危機四伏了，我們得先換個應對策略。」"
     ]
     st.session_state.game_started = True
 
 SYSTEM_INSTRUCTION = """
-你是一個高品質的【三界跨界 RPG 遊戲主持人（GM）】。
+你是一個高品質且節奏明快的【三界跨界 RPG 遊戲主持人（GM）】。
 
 【玩家背景與隱藏設定】：
-- 玩家開局是一個普通底層小薯（可能在凡間、仙界、妖界、魔界或靈界）。
-- 玩家有一個隱藏身世/血脈記錄在 `secret_bloodline` 中。
-- ⚠️ **重要規則**：切勿在剛開局就直接公開或說明隱藏身世！必須隨著劇情推進、遭遇奇遇、危急時刻或修為突破時，才通過細節描寫逐步引導覺醒。
+- 玩家開局是一個普通底層小薯。
+- 玩家有一個隱藏身世/血脈記錄在 `secret_bloodline` 中（切勿過早直接公開，需透過劇情漸進覺醒）。
 
-【🎯 選項生成規則】：
-- 每次必須生成 4 到 5 個不同的行動選項。
-- 選項必須涵蓋多種不同類型（穩健生存、冒險探索、社交互動、機智應變）。
-- 請在每個選項前加上合適的 Emoji 標情符號（如 🗡️, 📜, 🌸, 🧘, 🎒）。
+【🎯 選項生成核心規則（極度重要）】：
+- 每次必須生成 4 個不同的行動選項。
+- **選項風格必須模仿高級武俠/仙俠小說的沉浸式對白與心態描寫**（參考：「你沒有立刻答話，而是……」、「你抬眸望向……語氣篤定……」、「你沒有急著回應，目光落在……」）。
+- 每個選項開頭必須是數字編號（如 `1`, `2`, `3`, `4`），後面緊接著細膩的動作、試探或對白，絕不能只是單純的短動詞（如「去打工」、「拿武器」）。
 
 【輸出格式規則】：
 必須嚴格回傳標準 JSON（切勿包含任何多餘文字）：
 {
-  "story": "詳細劇情演繹（250字以內），文筆生動流暢，注重氛圍感。",
-  "options": ["選項1", "選項2", "選項3", "選項4", "選項5"],
+  "story": "詳細精彩的劇情演繹（250字以內），文筆生動，推進劇情。",
+  "story_summary_update": "請把『過往劇情摘要』與『本次最新發生的關鍵劇情』融合，更新成一段 80 字以內的精簡歷史摘要，讓下一輪 AI 能掌握全貌。",
+  "options": [
+    "1 具體且充滿張力的選項描述...",
+    "2 具體且充滿張力的選項描述...",
+    "3 具體且充滿張力的選項描述...",
+    "4 具體且充滿張力的選項描述..."
+  ],
   "player_update": {
     "identity": "身份描述",
     "hp": "100/100",
@@ -151,14 +156,18 @@ SYSTEM_INSTRUCTION = """
 def process_turn(player_action):
     game_state = st.session_state.game_state
     
+    recent_history = game_state["story_history"][-4:]
+    
     prompt = f"{SYSTEM_INSTRUCTION}\n\n"
+    prompt += f"【過往冒險精華摘要】：{game_state.get('story_summary', '無')}\n"
+    prompt += f"【最近幾幕劇情】：{json.dumps(recent_history, ensure_ascii=False)}\n"
     prompt += f"當前主角狀態：{json.dumps(game_state['player'], ensure_ascii=False)}\n"
     prompt += f"當前背包：{json.dumps(game_state['inventory'], ensure_ascii=False)}\n"
     prompt += f"當前已結識人物：{json.dumps(game_state['npcs'], ensure_ascii=False)}\n"
-    prompt += f"玩家採取的行動：{player_action}\n"
-    prompt += "請嚴格回傳 JSON 格式數據。"
+    prompt += f"玩家採取的最新行動：{player_action}\n"
+    prompt += "請嚴格回傳 JSON 格式數據，確保選項風格完全符合武俠沉浸式對白。"
 
-    with st.spinner("🔮 AI 正在演繹命運劇情，請稍候..."):
+    with st.spinner("🔮 命運齒輪轉動中，AI 正在生成劇情..."):
         try:
             interaction = client.interactions.create(
                 model='gemini-3.6-flash',
@@ -175,6 +184,9 @@ def process_turn(player_action):
 
             for npc in data.get("npc_updates", []):
                 game_state["npcs"][npc["name"]] = npc
+
+            if "story_summary_update" in data:
+                game_state["story_summary"] = data["story_summary_update"]
 
             game_state["story_history"].append(f"👉 **你選擇了**：{player_action}")
             game_state["story_history"].append(data["story"])
@@ -212,7 +224,7 @@ if not st.session_state.game_started:
             except Exception as err:
                 st.error("存檔代碼無效！")
 else:
-    # 📌 【左側邊欄】：固定即時狀態面板與導航按鈕
+    # 📌 【左側邊欄】
     with st.sidebar:
         st.header("📌 逆襲導航與狀態")
         p = st.session_state.game_state["player"]
@@ -235,7 +247,6 @@ else:
         if "active_tab" not in st.session_state:
             st.session_state.active_tab = "📖 主線劇情"
 
-        # 💡 點擊按鈕後，會自動更新頁面並重新執行，手機上點選後側邊欄會自動收起，非常順暢！
         if st.button("📖 主線劇情與冒險", use_container_width=True):
             st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
@@ -255,7 +266,7 @@ else:
             st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
 
-    # 🖥️ 【中央主畫面】：根據左側切換的狀態渲染，乾淨清晰
+    # 🖥️ 【中央主畫面】
     current_view = st.session_state.get("active_tab", "📖 主線劇情")
 
     if current_view == "📖 主線劇情":
@@ -305,7 +316,6 @@ else:
     elif current_view == "💾 存檔與讀檔":
         st.subheader("💾 遊戲存檔與讀檔管理")
         
-        # 🔗 【新增】：在存檔介面加入返回劇情的按鈕
         if st.button("⬅️ 返回主線劇情", use_container_width=True):
             st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
