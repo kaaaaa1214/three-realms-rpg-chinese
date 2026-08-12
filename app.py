@@ -4,7 +4,7 @@ import streamlit as st
 from google import genai
 
 # ---------------------------------------------------------
-# 1. 頁面設定 (支援手機與寬螢幕佈局)
+# 1. 頁面設定
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="三界奇譚：小薯逆襲記",
@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# 2. 初始化 Gemini API Key (從 Streamlit Secrets 讀取)
+# 2. 初始化 API Key
 # ---------------------------------------------------------
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
@@ -25,7 +25,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. 三界多元開局庫
+# 3. 遊戲開局設定
 # ---------------------------------------------------------
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
@@ -46,7 +46,7 @@ SECRET_BLOODLINES = [
 ]
 
 SPECIAL_ITEMS = [
-    {"name": "殘破玉佩", "count": 1, "desc": "從小隨身攜帶的殘破玉佩，散發著微弱的古老氣息。"},
+    {"name": "殘破玉佩", "count": 1, "desc": "從小隨身帶著的殘破玉佩，散發著微弱的古老氣息。"},
     {"name": "無字天書殘頁", "count": 1, "desc": "在廢墟中撿到的古舊紙頁，隱隱有文字流轉。"},
     {"name": "鏽蝕鐵劍", "count": 1, "desc": "看似一把普通廢鐵劍，卻能在深夜發出陣陣異響。"},
     {"name": "神秘獸牙", "count": 1, "desc": "散發著淡淡野性威壓的遠古獸牙佩飾。"}
@@ -57,10 +57,6 @@ def init_game(player_name):
     secret_bloodline = random.choice(SECRET_BLOODLINES)
     special_item = random.choice(SPECIAL_ITEMS)
     
-    comprehension = random.randint(8, 12)
-    fortune = random.randint(8, 12)
-    charm = random.randint(8, 12)
-
     st.session_state.game_state = {
         "player": {
             "name": player_name if player_name.strip() else "詩柔",
@@ -72,16 +68,16 @@ def init_game(player_name):
             "realm": "凡俗之軀 / 煉氣期一層",
             "location": loc_info['loc'],
             "status": "健康（平靜）",
-            "comprehension": comprehension,
-            "fortune": fortune,
-            "charm": charm,
+            "comprehension": random.randint(8, 12),
+            "fortune": random.randint(8, 12),
+            "charm": random.randint(8, 12),
             "righteousness": 0,
             "evil_aura": 0,
             "fame": 0
         },
         "inventory": [
             {"name": "粗布麻衣", "count": 1, "desc": "極為普通的日常衣物。"},
-            {"name": "乾糧清水", "count": 2, "desc": "填飽肚子的普通補給，補充少量飽腹度。"},
+            {"name": "乾糧清水", "count": 2, "desc": "填飽肚子的普通補給。"},
             special_item
         ],
         "npcs": {},
@@ -90,120 +86,86 @@ def init_game(player_name):
             f"你是【{player_name}】，目前只是一個平凡的{loc_info['identity']}（{loc_info['bg']}）。\n"
             f"茫茫三界，弱肉強食，屬於你的小薯逆襲之路正式展開……"
         ],
-        "story_summary": "遊戲剛開局，主角正處於命運起點，尚未經歷重大事件。"
+        "story_summary": "遊戲剛開局，主角正處於命運起點。"
     }
     st.session_state.current_options = [
-        "1 既沒有立刻搭話，也沒有亂動，而是冷眼旁觀周圍的動靜，試圖從中找出對自己最有利的破局契機。",
-        f"2 沒有急著回應周遭的變故，目光落在那件【{special_item['name']}】上片刻，忽然開口試探：「這東西……究竟藏著什麼秘密？」",
-        "3 微微挑眉，語氣平淡卻帶著一絲不容置疑：「與其在這裡盲目耗著，不如先弄清楚這裡究竟是什麼地方，誰才是真正話事的人。」",
-        "4 沒有將心思放在眼前的困境上，反而若有所思地環顧四周：「這地方看似平靜，恐怕暗地裡早已經危機四伏了，我們得先換個應對策略。」"
+        "1 既沒有立刻搭話，也沒有亂動，而是冷眼旁觀周圍的動靜。",
+        f"2 沒有急著回應周遭變故，目光落在那件【{special_item['name']}】上片刻。",
+        "3 微微挑眉，語氣平淡卻帶著一絲不容置疑：「與其在這裡盲目耗著……」",
+        "4 沒有將心思放在眼前的困境上，反而若有所思地環顧四周。"
     ]
     st.session_state.game_started = True
 
 SYSTEM_INSTRUCTION = """
 你是一個高品質且節奏明快的【三界跨界 RPG 遊戲主持人（GM）】。
-
-【玩家背景與隱藏設定】：
-- 玩家開局是一個普通底層小薯。
-- 玩家有一個隱藏身世/血脈記錄在 `secret_bloodline` 中（切勿過早直接公開，需透過劇情漸進覺醒）。
-
-【🎯 選項生成核心規則（極度重要）】：
-- 每次必須生成 4 個不同的行動選項。
-- **選項風格必須模仿高級武俠/仙俠小說的沉浸式對白與心態描寫**（參考：「你沒有立刻答話，而是……」、「你抬眸望向……語氣篤定……」、「你沒有急著回應，目光落在……」）。
-- 每個選項開頭必須是數字編號（如 `1`, `2`, `3`, `4`），後面緊接著細膩的動作、試探或對白。
-
-【輸出格式規則】：
-必須嚴格回傳標準 JSON（切勿包含任何額外文字或 markdown 程式碼區塊標記，直接回傳純 JSON 字串）：
+每次必須生成 4 個不同的行動選項（以 1, 2, 3, 4 開頭）。
+必須嚴格回傳標準純 JSON（絕對不要包覆在 markdown ```json 裡面，直接給純字串）：
 {
-  "story": "詳細精彩的劇情演繹（250字以內），文筆生動，推進劇情。",
-  "story_summary_update": "請把『過往劇情摘要』與『本次最新發生的關鍵劇情』融合，更新成一段 80 字以內的精簡歷史摘要，讓下一輪 AI 能掌握全貌。",
+  "story": "詳細精彩的劇情演繹（250字以內）。",
+  "story_summary_update": "80字以內的精簡歷史摘要。",
   "options": [
-    "1 具體且充滿張力的選項描述...",
-    "2 具體且充滿張力的選項描述...",
-    "3 具體且充滿張力的選項描述...",
-    "4 具體且充滿張力的選項描述..."
+    "1 選項一...",
+    "2 選項二...",
+    "3 選項三...",
+    "4 選項四..."
   ],
   "player_update": {
-    "identity": "身份描述",
-    "hp": "100/100",
-    "mp": "30/30",
-    "fullness": "85/100",
-    "realm": "當前境界",
-    "location": "當前地點",
-    "status": "當前狀態",
-    "comprehension": 10,
-    "fortune": 10,
-    "charm": 10,
-    "righteousness": 0,
-    "evil_aura": 0,
-    "fame": 0
+    "identity": "身份描述", "hp": "100/100", "mp": "30/30", "fullness": "85/100",
+    "realm": "境界", "location": "地點", "status": "狀態",
+    "comprehension": 10, "fortune": 10, "charm": 10,
+    "righteousness": 0, "evil_aura": 0, "fame": 0
   },
-  "inventory_update": [
-    {"name": "物品名", "count": 1, "desc": "說明"}
-  ],
-  "npc_updates": [
-    {
-      "name": "角色名稱",
-      "identity": "身份背景",
-      "affinity": 10,
-      "relationship": "關係狀態",
-      "key_memory": "互動印象摘要"
-    }
-  ]
+  "inventory_update": [{"name": "物品名", "count": 1, "desc": "說明"}],
+  "npc_updates": []
 }
 """
 
 def process_turn(player_action):
     game_state = st.session_state.game_state
-    
     recent_history = game_state["story_history"][-4:]
     
     prompt = f"{SYSTEM_INSTRUCTION}\n\n"
-    prompt += f"【過往冒險精華摘要】：{game_state.get('story_summary', '無')}\n"
-    prompt += f"【最近幾幕劇情】：{json.dumps(recent_history, ensure_ascii=False)}\n"
-    prompt += f"當前主角狀態：{json.dumps(game_state['player'], ensure_ascii=False)}\n"
-    prompt += f"當前背包：{json.dumps(game_state['inventory'], ensure_ascii=False)}\n"
-    prompt += f"當前已結識人物：{json.dumps(game_state['npcs'], ensure_ascii=False)}\n"
-    prompt += f"玩家採取的最新行動：{player_action}\n"
-    prompt += "請嚴格回傳純 JSON 格式數據。"
+    prompt += f"【摘要】：{game_state.get('story_summary', '無')}\n"
+    prompt += f"【近期劇情】：{json.dumps(recent_history, ensure_ascii=False)}\n"
+    prompt += f"【狀態】：{json.dumps(game_state['player'], ensure_ascii=False)}\n"
+    prompt += f"【玩家最新行動】：{player_action}\n"
+    prompt += "請嚴格回傳純 JSON。"
 
-    with st.spinner("🔮 命運齒輪轉動中，AI 正在生成劇情..."):
+    # 直接使用 st.status 確保進度條與轉圈圈穩定顯示
+    with st.status("🔮 命運齒輪轉動中，AI 正在生成劇情...", expanded=True) as status:
         try:
-            # 💡 已更新為穩定支援的 gemini-2.0-flash 模型
+            st.write("正在呼叫 Gemini-2.0-flash 模型...")
             response = client.models.generate_content(
                 model='gemini-2.0-flash',
                 contents=prompt
             )
             raw_text = response.text
+            st.write("資料解析中...")
             
             clean_text = raw_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
 
             game_state["player"].update(data.get("player_update", {}))
-            
             if "inventory_update" in data:
                 game_state["inventory"] = [i for i in data["inventory_update"] if i.get("count", 0) > 0]
-
-            for npc in data.get("npc_updates", []):
-                game_state["npcs"][npc["name"]] = npc
-
             if "story_summary_update" in data:
                 game_state["story_summary"] = data["story_summary_update"]
 
             game_state["story_history"].append(f"👉 **你選擇了**：{player_action}")
             game_state["story_history"].append(data["story"])
             st.session_state.current_options = data.get("options", [
-                "1 繼續冷靜觀察四周，尋找下一個突破口。",
-                "2 嘗試開口詢問身旁的人，探聽更多內幕消息。",
-                "3 悄悄檢查身上的隨身物品，看看有沒有隱藏的線索。",
-                "4 找個安全的地方暫避風頭，默默運氣調息。"
+                "1 繼續冷靜觀察四周。",
+                "2 嘗試開口詢問身旁的人。",
+                "3 悄悄檢查身上的隨身物品。",
+                "4 找個安全的地方暫避風頭。"
             ])
-
+            status.update(label="✨ 劇情生成完畢！", state="complete", expanded=False)
         except Exception as e:
-            st.error(f"劇情生成失敗！請檢查網絡或重試。錯誤詳情：\n{str(e)}")
+            status.update(label="❌ 生成失敗", state="error", expanded=True)
+            st.error(f"錯誤詳情：\n{str(e)}")
 
 # ---------------------------------------------------------
-# 4. UI 介面配置
+# 4. 介面呈現
 # ---------------------------------------------------------
 st.title("🌸 三界奇譚：小薯逆襲記")
 
@@ -215,25 +177,9 @@ if not st.session_state.game_started:
         if submit_btn:
             init_game(input_name)
             st.rerun()
-
-    st.markdown("---")
-    st.subheader("💾 讀取舊存檔")
-    load_code = st.text_area("請貼上你的存檔代碼：", key="init_load_code")
-    if st.button("讀取存檔進度 📂", use_container_width=True):
-        if load_code.strip():
-            try:
-                loaded_data = json.loads(load_code.strip())
-                st.session_state.game_state = loaded_data.get("game_state", {})
-                st.session_state.current_options = loaded_data.get("current_options", [])
-                st.session_state.game_started = True
-                st.success("讀取存檔成功！")
-                st.rerun()
-            except Exception as err:
-                st.error("存檔代碼無效！")
 else:
-    # 📌 【左側邊欄】
     with st.sidebar:
-        st.header("📌 逆襲導航與狀態")
+        st.header("📌 狀態與導航")
         p = st.session_state.game_state["player"]
         st.write(f"👤 **{p['name']}**")
         st.write(f"🏷️ 境界：{p['realm']}")
@@ -242,110 +188,30 @@ else:
         col1, col2 = st.columns(2)
         col1.metric("❤️ HP", p["hp"])
         col2.metric("💙 MP", p["mp"])
-        st.metric("🍚 飽腹", p["fullness"])
-
-        with st.expander("📊 詳細屬性數據", expanded=True):
-            st.write(f"🧠 悟性：{p['comprehension']} | 🎲 福緣：{p['fortune']} | ✨ 魅力：{p['charm']}")
-            st.write(f"⚖️ 正氣：{p['righteousness']} | 🩸 煞氣：{p['evil_aura']} | 👑 威名：{p['fame']}")
-
-        st.markdown("---")
-        st.subheader("🗂️ 畫面檢視切換")
         
-        if "active_tab" not in st.session_state:
-            st.session_state.active_tab = "📖 主線劇情"
-
-        if st.button("📖 主線劇情與冒險", use_container_width=True):
-            st.session_state.active_tab = "📖 主線劇情"
-            st.rerun()
-        if st.button("🎒 我的背包", use_container_width=True):
-            st.session_state.active_tab = "🎒 我的背包"
-            st.rerun()
-        if st.button("👥 三界人物關係", use_container_width=True):
-            st.session_state.active_tab = "👥 三界人物關係"
-            st.rerun()
-        if st.button("💾 存檔與讀檔", use_container_width=True):
-            st.session_state.active_tab = "💾 存檔與讀檔"
-            st.rerun()
-
-        st.markdown("---")
         if st.button("🎲 重開新局", use_container_width=True):
             st.session_state.game_started = False
-            st.session_state.active_tab = "📖 主線劇情"
             st.rerun()
 
-    # 🖥️ 【中央主畫面】
-    current_view = st.session_state.get("active_tab", "📖 主線劇情")
-
-    if current_view == "📖 主線劇情":
-        st.subheader("📖 主線劇情與冒險")
-        for text in st.session_state.game_state["story_history"]:
-            if text.startswith("👉"):
-                st.info(text)
-            else:
-                st.write(text)
-
-        st.markdown("---")
-        st.write("✨ **請選擇你的行動：**")
-        
-        for idx, opt in enumerate(st.session_state.current_options):
-            if st.button(opt, key=f"opt_{idx}", use_container_width=True):
-                process_turn(opt)
-                st.rerun()
-
-        st.markdown("---")
-        custom_act = st.text_input("💬 自由意念輸入：", key="custom_input")
-        if st.button("發送自訂行動", use_container_width=True):
-            if custom_act.strip():
-                process_turn(custom_act.strip())
-                st.rerun()
-
-    elif current_view == "🎒 我的背包":
-        st.subheader("🎒 我的背包物品欄")
-        inv = st.session_state.game_state["inventory"]
-        if not inv:
-            st.info("背包空空如也。")
+    st.subheader("📖 主線劇情與冒險")
+    for text in st.session_state.game_state["story_history"]:
+        if text.startswith("👉"):
+            st.info(text)
         else:
-            for item in inv:
-                st.success(f"**【{item['name']}】 x {item['count']}**\n\n說明：{item['desc']}")
+            st.write(text)
 
-    elif current_view == "👥 三界人物關係":
-        st.subheader("👥 三界人物誌與好感度")
-        npcs = st.session_state.game_state["npcs"]
-        if not npcs:
-            st.info("目前尚未結識任何三界角色。漫漫征途，等待你的探索！")
-        else:
-            for name, info in npcs.items():
-                with st.expander(f"🌸 {name}（好感/敬意：{info['affinity']}）", expanded=True):
-                    st.write(f"**身份**：{info['identity']}")
-                    st.write(f"**關係**：🤝 {info['relationship']}")
-                    st.write(f"**印象關鍵**：{info['key_memory']}")
-
-    elif current_view == "💾 存檔與讀檔":
-        st.subheader("💾 遊戲存檔與讀檔管理")
-        
-        if st.button("⬅️ 返回主線劇情", use_container_width=True):
-            st.session_state.active_tab = "📖 主線劇情"
+    st.markdown("---")
+    st.write("✨ **請選擇你的行動：**")
+    
+    # 使用獨立且帶有亂數/序號防衝突的 key
+    for idx, opt in enumerate(st.session_state.current_options):
+        if st.button(opt, key=f"unique_opt_key_{idx}_{len(st.session_state.game_state['story_history'])}", use_container_width=True):
+            process_turn(opt)
             st.rerun()
-            
-        st.markdown("---")
-        save_data = {
-            "game_state": st.session_state.game_state,
-            "current_options": st.session_state.current_options
-        }
-        save_string = json.dumps(save_data, ensure_ascii=False)
-        st.text_area("📋 當前存檔代碼（全選複製保存）：", value=save_string, height=150, key="main_save_box")
-        
-        st.markdown("---")
-        in_load_code = st.text_area("📥 請在此貼上存檔代碼以讀取進度：", key="main_load_box")
-        if st.button("確認載入存檔 🔄", use_container_width=True):
-            if in_load_code.strip():
-                try:
-                    loaded = json.loads(in_load_code.strip())
-                    st.session_state.game_state = loaded.get("game_state", {})
-                    st.session_state.current_options = loaded.get("current_options", [])
-                    st.success("存檔載入成功！")
-                    st.rerun()
-                except Exception as err:
-                    st.error("存檔代碼格式錯誤，請檢查是否複製完整！")
-            else:
-                st.warning("請先貼上存檔代碼！")
+
+    st.markdown("---")
+    custom_act = st.text_input("💬 自由意念輸入：", key="custom_input_box")
+    if st.button("發送自訂行動", use_container_width=True):
+        if custom_act.strip():
+            process_turn(custom_act.strip())
+            st.rerun()
