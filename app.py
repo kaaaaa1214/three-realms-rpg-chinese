@@ -5,6 +5,17 @@ import random
 import re
 import time
 
+# ==============================
+# OpenRouter / Nemotron 設定
+# ==============================
+
+OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY", "")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+if not OPENROUTER_API_KEY:
+    st.error("⚠️ 找不到 OPENROUTER_API_KEY，請到 Streamlit Secrets 設定。")
+    st.stop()
+
 
 # =========================================================
 # 1. Streamlit 頁面設定
@@ -448,9 +459,6 @@ def parse_json_response(text):
 # =========================================================
 
 def call_nemotron(messages):
-    if not OPENROUTER_API_KEY:
-        raise RuntimeError("找不到 OPENROUTER_API_KEY，請檢查 Streamlit Secrets。")
-
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
@@ -487,7 +495,6 @@ def call_nemotron(messages):
         raise RuntimeError("Nemotron 返回空白內容。")
 
     return content
-
 
 # =========================================================
 # 11. 建立遊戲 Prompt
