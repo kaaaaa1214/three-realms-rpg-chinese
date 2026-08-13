@@ -102,6 +102,14 @@ STARTING_ITEMS = [
 ]
 
 
+PAGE_OPTIONS = [
+    "📖 主線劇情",
+    "🎒 背包",
+    "👥 人物關係",
+    "💾 存檔／讀檔"
+]
+
+
 # =========================================================
 # 3. 系統 Prompt
 # =========================================================
@@ -257,18 +265,57 @@ if "game_started" not in st.session_state:
 if "game_state" not in st.session_state:
     st.session_state.game_state = None
 
+# ---------------------------------------------------------
+# 重要：
+#
+# game_page = 真正保存的頁面狀態
+#
+# _game_page_widget = radio 專用 widget key
+#
+# 兩者分開，避免 Streamlit widget state 衝突。
+# ---------------------------------------------------------
+
 if "game_page" not in st.session_state:
     st.session_state.game_page = "📖 主線劇情"
+
+if "_game_page_widget" not in st.session_state:
+    st.session_state["_game_page_widget"] = "📖 主線劇情"
+
+if "pending_game_page" not in st.session_state:
+    st.session_state.pending_game_page = None
 
 if "scroll_to_bottom" not in st.session_state:
     st.session_state.scroll_to_bottom = False
 
 
 # =========================================================
-# 5. 工具：建立全新背包
+# 5. Page Callback
+# =========================================================
+
+def sync_game_page():
+    """
+    Radio 改變時執行。
+
+    注意：
+    這裡只修改 game_page。
+    不修改 _game_page_widget。
+    """
+
+    selected = st.session_state.get(
+        "_game_page_widget",
+        "📖 主線劇情"
+    )
+
+    if selected in PAGE_OPTIONS:
+        st.session_state.game_page = selected
+
+
+# =========================================================
+# 6. 工具：建立全新背包
 # =========================================================
 
 def create_starting_inventory():
+
     return [
         {
             "name": item["name"],
@@ -280,14 +327,16 @@ def create_starting_inventory():
 
 
 # =========================================================
-# 6. 初始化遊戲
+# 7. 初始化遊戲
 # =========================================================
 
 def init_game(player_name):
 
     location = random.choice(LOCATIONS)
 
-    player_name = str(player_name).strip()
+    player_name = str(
+        player_name
+    ).strip()
 
     if not player_name:
         player_name = "詩柔"
@@ -297,7 +346,7 @@ def init_game(player_name):
     charm = random.randint(8, 12)
 
     state = {
-        "version": "V3.4",
+        "version": "V3.5",
 
         "turn": 0,
 
@@ -389,7 +438,9 @@ def init_game(player_name):
         f"尚無人知曉。"
     )
 
-    state["story_history"].append(opening_story)
+    state["story_history"].append(
+        opening_story
+    )
 
     state["current_options"] = [
         "仔細觀察四周，先弄清楚自己身處何地。",
@@ -401,12 +452,21 @@ def init_game(player_name):
 
     st.session_state.game_state = state
     st.session_state.game_started = True
+
+    # -----------------------------------------------------
+    # 注意：
+    # 不碰 _game_page_widget
+    # 只設定真正的頁面資料。
+    # -----------------------------------------------------
+
     st.session_state.game_page = "📖 主線劇情"
+    st.session_state.pending_game_page = None
+
     st.session_state.scroll_to_bottom = True
 
 
 # =========================================================
-# 7. 數值處理
+# 8. 數值處理
 # =========================================================
 
 def clamp(value, minimum, maximum):
@@ -462,7 +522,7 @@ def normalise_player(player):
 
 
 # =========================================================
-# 8. 狀態文字
+# 9. 狀態文字
 # =========================================================
 
 def get_status_text(player):
@@ -486,7 +546,7 @@ def get_status_text(player):
 
 
 # =========================================================
-# 9. 清理模型輸出
+# 10. 清理模型輸出
 # =========================================================
 
 def clean_model_text(text):
@@ -527,7 +587,7 @@ def clean_model_text(text):
 
 
 # =========================================================
-# 10. JSON Parser
+# 11. JSON Parser
 # =========================================================
 
 def parse_json_response(text):
@@ -538,7 +598,10 @@ def parse_json_response(text):
         return None
 
     try:
-        data = json.loads(cleaned)
+
+        data = json.loads(
+            cleaned
+        )
 
         if isinstance(data, dict):
             return data
@@ -556,7 +619,10 @@ def parse_json_response(text):
         ]
 
         try:
-            data = json.loads(candidate)
+
+            data = json.loads(
+                candidate
+            )
 
             if isinstance(data, dict):
                 return data
@@ -568,16 +634,10 @@ def parse_json_response(text):
 
 
 # =========================================================
-# 11. OpenRouter API
+# 12. OpenRouter API
 # =========================================================
 
 def call_nemotron(messages):
-
-    # =====================================================
-    # 非常重要：
-    # HTTP Header 只能放 ASCII 字符。
-    # 所以 Header 永遠只使用英文。
-    # =====================================================
 
     api_key = str(
         st.secrets.get(
@@ -587,6 +647,7 @@ def call_nemotron(messages):
     ).strip()
 
     if not api_key:
+
         raise RuntimeError(
             "找不到 OPENROUTER_API_KEY。"
         )
@@ -644,13 +705,10 @@ def call_nemotron(messages):
             "HTTP Header 出現非英文字符。"
         )
 
-    # =====================================================
-    # HTTP Status
-    # =====================================================
-
     if response.status_code != 200:
 
         try:
+
             error_data = response.json()
 
             error_message = json.dumps(
@@ -669,10 +727,6 @@ def call_nemotron(messages):
             + error_message
         )
 
-    # =====================================================
-    # JSON Response
-    # =====================================================
-
     try:
 
         result = response.json()
@@ -683,7 +737,10 @@ def call_nemotron(messages):
             "OpenRouter 返回的內容不是有效 JSON。"
         )
 
-    if not isinstance(result, dict):
+    if not isinstance(
+        result,
+        dict
+    ):
 
         raise RuntimeError(
             "OpenRouter 返回格式異常。"
@@ -722,13 +779,19 @@ def call_nemotron(messages):
             "模型返回內容格式異常。"
         )
 
-    if isinstance(content, list):
+    if isinstance(
+        content,
+        list
+    ):
 
         content_parts = []
 
         for part in content:
 
-            if isinstance(part, dict):
+            if isinstance(
+                part,
+                dict
+            ):
 
                 text_part = part.get(
                     "text",
@@ -736,6 +799,7 @@ def call_nemotron(messages):
                 )
 
                 if text_part:
+
                     content_parts.append(
                         str(text_part)
                     )
@@ -754,7 +818,7 @@ def call_nemotron(messages):
 
 
 # =========================================================
-# 12. 建立遊戲 Prompt
+# 13. 建立遊戲 Prompt
 # =========================================================
 
 def build_game_prompt(action):
@@ -849,7 +913,7 @@ def build_game_prompt(action):
 
 
 # =========================================================
-# 13. 套用玩家數值
+# 14. 套用玩家數值
 # =========================================================
 
 def apply_player_changes(data):
@@ -870,43 +934,55 @@ def apply_player_changes(data):
         update = {}
 
     try:
+
         hp_change = int(
             update.get(
                 "hp_change",
                 0
             )
         )
+
     except Exception:
+
         hp_change = 0
 
     try:
+
         mp_change = int(
             update.get(
                 "mp_change",
                 0
             )
         )
+
     except Exception:
+
         mp_change = 0
 
     try:
+
         fullness_change = int(
             update.get(
                 "fullness_change",
                 0
             )
         )
+
     except Exception:
+
         fullness_change = 0
 
     try:
+
         money_change = int(
             update.get(
                 "money_change",
                 0
             )
         )
+
     except Exception:
+
         money_change = 0
 
     player["hp"] += hp_change
@@ -922,6 +998,7 @@ def apply_player_changes(data):
         realm
         and str(realm) != "維持不變"
     ):
+
         player["realm"] = str(
             realm
         )
@@ -934,6 +1011,7 @@ def apply_player_changes(data):
         location
         and str(location) != "維持不變"
     ):
+
         player["location"] = str(
             location
         )
@@ -948,7 +1026,7 @@ def apply_player_changes(data):
 
 
 # =========================================================
-# 14. 背包
+# 15. 背包
 # =========================================================
 
 def apply_inventory_changes(data):
@@ -1046,7 +1124,7 @@ def apply_inventory_changes(data):
 
 
 # =========================================================
-# 15. NPC
+# 16. NPC
 # =========================================================
 
 def apply_npc_updates(data):
@@ -1131,7 +1209,7 @@ def apply_npc_updates(data):
 
 
 # =========================================================
-# 16. 防止重複劇情
+# 17. 防止重複劇情
 # =========================================================
 
 def is_duplicate_story(new_story):
@@ -1199,7 +1277,7 @@ def is_duplicate_story(new_story):
 
 
 # =========================================================
-# 17. 預設選項
+# 18. 預設選項
 # =========================================================
 
 DEFAULT_OPTIONS = [
@@ -1211,7 +1289,62 @@ DEFAULT_OPTIONS = [
 
 
 # =========================================================
-# 18. 處理玩家回合
+# 19. 查看狀態
+# =========================================================
+
+def show_status():
+
+    game = st.session_state.game_state
+
+    player = game["player"]
+
+    status_story = (
+        "你暫時停下腳步。\n\n"
+        "你仔細整理自己的狀態。\n\n"
+
+        f"目前生命狀態為【"
+        f"{player['hp']}/"
+        f"{player['max_hp']}】。\n"
+
+        f"體內靈力為【"
+        f"{player['mp']}/"
+        f"{player['max_mp']}】。\n"
+
+        f"飽腹程度為【"
+        f"{player['fullness']}/100】。\n"
+
+        f"身上共有【"
+        f"{player['money']}文錢】。\n\n"
+
+        f"目前境界："
+        f"{player['realm']}。\n"
+
+        f"目前位置："
+        f"{player['location']}。\n"
+
+        f"目前狀態："
+        f"{player['status']}。"
+    )
+
+    game["story_history"].append(
+        status_story
+    )
+
+    game["last_action"] = "查看狀態"
+    game["last_story"] = status_story
+
+    game["current_options"] = [
+        "繼續觀察周圍環境。",
+        "主動與附近的人交談。",
+        "尋找賺取金錢的方法。",
+        "離開目前位置，尋找新的地方。"
+    ]
+
+    st.session_state.scroll_to_bottom = True
+
+
+# =========================================================
+# 20. 處理玩家回合
 # =========================================================
 
 def process_turn(action):
@@ -1234,68 +1367,25 @@ def process_turn(action):
     if not action:
         return
 
-    # =====================================================
-    # 查看狀態
-    # =====================================================
+    # -----------------------------------------------------
+    # 查看狀態不消耗回合
+    # -----------------------------------------------------
 
     if action.startswith(
         "查看狀態"
     ):
 
-        player = game["player"]
-
-        status_story = (
-            "你暫時停下腳步。\n\n"
-            "你仔細整理自己的狀態。\n\n"
-            f"目前生命狀態為【"
-            f"{player['hp']}/"
-            f"{player['max_hp']}】。\n"
-
-            f"體內靈力為【"
-            f"{player['mp']}/"
-            f"{player['max_mp']}】。\n"
-
-            f"飽腹程度為【"
-            f"{player['fullness']}/100】。\n"
-
-            f"身上共有【"
-            f"{player['money']}文錢】。\n\n"
-
-            f"目前境界："
-            f"{player['realm']}。\n"
-
-            f"目前位置："
-            f"{player['location']}。\n"
-
-            f"目前狀態："
-            f"{player['status']}。"
-        )
-
-        game[
-            "story_history"
-        ].append(
-            status_story
-        )
-
-        game[
-            "last_action"
-        ] = action
-
-        st.session_state.scroll_to_bottom = True
+        show_status()
 
         return
 
-    # =====================================================
+    # -----------------------------------------------------
     # Lock
-    # =====================================================
+    # -----------------------------------------------------
 
     game["processing"] = True
 
     try:
-
-        # =================================================
-        # 回合 +1
-        # =================================================
 
         game["turn"] += 1
 
@@ -1314,10 +1404,6 @@ def process_turn(action):
             }
         ]
 
-        # =================================================
-        # API
-        # =================================================
-
         with st.spinner(
             "🔮 命運正在推演……"
         ):
@@ -1326,17 +1412,13 @@ def process_turn(action):
                 messages
             )
 
-        # =================================================
-        # Parse
-        # =================================================
-
         data = parse_json_response(
             raw
         )
 
-        # =================================================
+        # -------------------------------------------------
         # JSON 修復
-        # =================================================
+        # -------------------------------------------------
 
         if data is None:
 
@@ -1409,9 +1491,9 @@ def process_turn(action):
                 "請稍後再試。"
             )
 
-        # =================================================
+        # -------------------------------------------------
         # Story
-        # =================================================
+        # -------------------------------------------------
 
         story = str(
             data.get(
@@ -1428,9 +1510,9 @@ def process_turn(action):
                 "你沒有貿然行動，而是重新思考下一步。"
             )
 
-        # =================================================
+        # -------------------------------------------------
         # Duplicate
-        # =================================================
+        # -------------------------------------------------
 
         if is_duplicate_story(
             story
@@ -1487,9 +1569,9 @@ def process_turn(action):
                     data = retry_data
                     story = retry_story
 
-        # =================================================
+        # -------------------------------------------------
         # 套用數值
-        # =================================================
+        # -------------------------------------------------
 
         apply_player_changes(
             data
@@ -1503,9 +1585,9 @@ def process_turn(action):
             data
         )
 
-        # =================================================
+        # -------------------------------------------------
         # 飢餓
-        # =================================================
+        # -------------------------------------------------
 
         player = game["player"]
 
@@ -1531,9 +1613,9 @@ def process_turn(action):
             player
         )
 
-        # =================================================
-        # Story Summary
-        # =================================================
+        # -------------------------------------------------
+        # Summary
+        # -------------------------------------------------
 
         summary = str(
             data.get(
@@ -1551,9 +1633,9 @@ def process_turn(action):
                 "story_summary"
             ] = summary[:500]
 
-        # =================================================
-        # 記錄
-        # =================================================
+        # -------------------------------------------------
+        # 記錄玩家行動
+        # -------------------------------------------------
 
         game[
             "story_history"
@@ -1564,6 +1646,10 @@ def process_turn(action):
             + "你選擇："
             + action
         )
+
+        # -------------------------------------------------
+        # 記錄劇情
+        # -------------------------------------------------
 
         game[
             "story_history"
@@ -1579,9 +1665,9 @@ def process_turn(action):
             "last_story"
         ] = story
 
-        # =================================================
-        # 控制歷史長度
-        # =================================================
+        # -------------------------------------------------
+        # 限制歷史長度
+        # -------------------------------------------------
 
         if len(
             game["story_history"]
@@ -1593,9 +1679,9 @@ def process_turn(action):
                 "story_history"
             ][-30:]
 
-        # =================================================
+        # -------------------------------------------------
         # 選項
-        # =================================================
+        # -------------------------------------------------
 
         model_options = data.get(
             "options",
@@ -1619,6 +1705,7 @@ def process_turn(action):
                     option
                     and option not in valid_options
                 ):
+
                     valid_options.append(
                         option
                     )
@@ -1654,19 +1741,14 @@ def process_turn(action):
             "current_options"
         ] = valid_options
 
-        # =================================================
-        # 成功後捲到底
-        # =================================================
-
         st.session_state.scroll_to_bottom = True
 
     except Exception as error:
 
-        # =================================================
+        # -------------------------------------------------
         # API / 模型失敗
-        # =================================================
+        # -------------------------------------------------
 
-        # 如果 API 失敗，不應該永久卡住
         game["turn"] = max(
             0,
             game["turn"] - 1
@@ -1683,7 +1765,7 @@ def process_turn(action):
 
 
 # =========================================================
-# 19. 存檔
+# 21. 存檔
 # =========================================================
 
 def create_save():
@@ -1691,7 +1773,7 @@ def create_save():
     game = st.session_state.game_state
 
     save_data = {
-        "version": "V3.4",
+        "version": "V3.5",
 
         "game_state": game,
 
@@ -1708,7 +1790,7 @@ def create_save():
 
 
 # =========================================================
-# 20. 讀檔
+# 22. 讀檔
 # =========================================================
 
 def load_save(save_string):
@@ -1721,6 +1803,7 @@ def load_save(save_string):
         data,
         dict
     ):
+
         raise ValueError(
             "存檔格式無效。"
         )
@@ -1733,17 +1816,18 @@ def load_save(save_string):
         game_state,
         dict
     ):
+
         raise ValueError(
             "找不到有效遊戲資料。"
         )
 
-    # =====================================================
-    # 補舊版本資料
-    # =====================================================
+    # -----------------------------------------------------
+    # 補舊版本
+    # -----------------------------------------------------
 
     game_state.setdefault(
         "version",
-        "V3.4"
+        "V3.5"
     )
 
     game_state.setdefault(
@@ -1791,9 +1875,9 @@ def load_save(save_string):
         ""
     )
 
-    # =====================================================
+    # -----------------------------------------------------
     # Player
-    # =====================================================
+    # -----------------------------------------------------
 
     player = game_state.setdefault(
         "player",
@@ -1905,117 +1989,127 @@ def load_save(save_string):
         player
     )
 
-    # =====================================================
+    # -----------------------------------------------------
     # Inventory
-    # =====================================================
+    # -----------------------------------------------------
 
     if not isinstance(
         game_state["inventory"],
         list
     ):
+
         game_state["inventory"] = []
 
-    # =====================================================
+    # -----------------------------------------------------
     # NPC
-    # =====================================================
+    # -----------------------------------------------------
 
     if not isinstance(
         game_state["npcs"],
         dict
     ):
+
         game_state["npcs"] = {}
 
-    # =====================================================
+    # -----------------------------------------------------
     # Options
-    # =====================================================
+    # -----------------------------------------------------
 
     if not isinstance(
         game_state["current_options"],
         list
     ):
+
         game_state["current_options"] = []
 
-    # =====================================================
-    # 安全重置 processing
-    # =====================================================
+    # -----------------------------------------------------
+    # Processing 安全重置
+    # -----------------------------------------------------
 
     game_state["processing"] = False
 
-    # =====================================================
+    # -----------------------------------------------------
     # 真正載入
-    #
-    # 注意：
-    # 這裡絕對不要寫
-    #
-    # st.session_state.game_page = ...
-    #
-    # 因為 radio widget 可能已經建立。
-    # =====================================================
+    # -----------------------------------------------------
 
-    st.session_state.game_state = (
-        game_state
-    )
-
+    st.session_state.game_state = game_state
     st.session_state.game_started = True
 
-    # =====================================================
-    # 頁面只在 rerun 前處理
-    # =====================================================
+    # -----------------------------------------------------
+    # 取得存檔頁面
+    # -----------------------------------------------------
 
     saved_page = data.get(
         "game_page",
         "📖 主線劇情"
     )
 
-    if saved_page not in [
-        "📖 主線劇情",
-        "🎒 背包",
-        "👥 人物關係",
-        "💾 存檔／讀檔"
-    ]:
+    if saved_page not in PAGE_OPTIONS:
         saved_page = "📖 主線劇情"
 
-    # 重要：
-    # 不直接修改已存在 widget 的 key。
+    # -----------------------------------------------------
+    # 只修改真正的遊戲頁面狀態
     #
-    # 改用「下一次 rerun 要去哪一頁」的暫存變數。
-    st.session_state["pending_game_page"] = (
-        saved_page
-    )
+    # 絕對不修改 _game_page_widget
+    # -----------------------------------------------------
+
+    st.session_state.game_page = saved_page
+
+    # -----------------------------------------------------
+    # 下一次 rerun 時，在 radio 建立前同步 widget
+    # -----------------------------------------------------
+
+    st.session_state.pending_game_page = saved_page
 
     st.session_state.scroll_to_bottom = True
 
 
 # =========================================================
-# 21. 處理 Pending Page
+# 23. Pending Page
 # =========================================================
 #
-# 這段一定要放在 Widget 建立之前。
+# 非常重要。
 #
-# 因此唔會再出現：
+# 這段一定在 radio 建立之前。
 #
-# st.session_state.game_page cannot be modified
-# after widget with key game_page is instantiated
+# 但是：
+#
+# 我們不直接修改已存在的 radio key。
+#
+# 只會在「目前這次執行尚未建立 widget」時，
+# 設定 _game_page_widget。
+#
 # =========================================================
 
 if (
-    "pending_game_page"
-    in st.session_state
+    st.session_state.get(
+        "pending_game_page"
+    )
+    in PAGE_OPTIONS
 ):
 
-    pending_page = (
-        st.session_state.pop(
-            "pending_game_page"
-        )
+    pending_page = st.session_state.pending_game_page
+
+    # -----------------------------------------------------
+    # 只有在 widget 尚未建立時才同步。
+    #
+    # 每次 rerun 開始時，radio 尚未建立，
+    # 因此這裡是安全的。
+    # -----------------------------------------------------
+
+    st.session_state["_game_page_widget"] = (
+        pending_page
     )
 
     st.session_state.game_page = (
         pending_page
     )
 
+    st.session_state.pending_game_page = None
+
 
 # =========================================================
-# 22. 頁面標題
+# 24. 頁面標題
 # =========================================================
 
 st.title(
@@ -2023,12 +2117,12 @@ st.title(
 )
 
 st.caption(
-    "V3.4 · Nemotron Free 穩定版"
+    "V3.5 · Nemotron Free 穩定版"
 )
 
 
 # =========================================================
-# 23. 未開始遊戲
+# 25. 未開始遊戲
 # =========================================================
 
 if not st.session_state.game_started:
@@ -2078,7 +2172,8 @@ if not st.session_state.game_started:
 
     if st.button(
         "📂 載入存檔",
-        use_container_width=True
+        use_container_width=True,
+        key="initial_load_button"
     ):
 
         if load_code.strip():
@@ -2112,7 +2207,7 @@ if not st.session_state.game_started:
 
 
 # =========================================================
-# 24. 取得遊戲狀態
+# 26. 取得遊戲狀態
 # =========================================================
 
 game = st.session_state.game_state
@@ -2121,7 +2216,7 @@ player = game["player"]
 
 
 # =========================================================
-# 25. Sidebar
+# 27. Sidebar
 # =========================================================
 
 with st.sidebar:
@@ -2246,37 +2341,68 @@ with st.sidebar:
     # =====================================================
     # Page Widget
     #
-    # 唯一地方建立 game_page widget
+    # 唯一地方建立 radio
+    #
+    # 注意：
+    # key 不再叫 game_page
     # =====================================================
 
     page = st.radio(
         "🗂️ 遊戲功能",
-        [
-            "📖 主線劇情",
-            "🎒 背包",
-            "👥 人物關係",
-            "💾 存檔／讀檔"
-        ],
-        key="game_page"
+        PAGE_OPTIONS,
+        key="_game_page_widget",
+        on_change=sync_game_page
     )
+
+    # 保險：
+    # radio 的返回值只用來決定本次顯示頁面。
+    #
+    # 不需要修改 widget key。
+    #
+    if page in PAGE_OPTIONS:
+        st.session_state.game_page = page
 
     st.markdown("---")
 
     if st.button(
         "🔄 重開新局",
-        use_container_width=True
+        use_container_width=True,
+        key="restart_game_button"
     ):
+
+        # -------------------------------------------------
+        # 清除遊戲資料
+        # -------------------------------------------------
 
         st.session_state.game_started = False
         st.session_state.game_state = None
-        st.session_state.game_page = "📖 主線劇情"
+
+        # -------------------------------------------------
+        # 修改的是普通 state，
+        # 不是 radio widget key。
+        # -------------------------------------------------
+
+        st.session_state.game_page = (
+            "📖 主線劇情"
+        )
+
+        st.session_state.pending_game_page = None
         st.session_state.scroll_to_bottom = False
+
+        # -------------------------------------------------
+        # 不碰 _game_page_widget
+        #
+        # 下一次真正建立 radio 時，
+        # 它會使用當前 widget state。
+        #
+        # 因為遊戲已經停止，radio 不會再被渲染。
+        # -------------------------------------------------
 
         st.rerun()
 
 
 # =========================================================
-# 26. 主線劇情
+# 28. 主線劇情
 # =========================================================
 
 if page == "📖 主線劇情":
@@ -2284,13 +2410,6 @@ if page == "📖 主線劇情":
     st.subheader(
         "📖 主線劇情"
     )
-
-    # =====================================================
-    # 故事容器
-    #
-    # 用 container + anchor
-    # 方便自動捲到底
-    # =====================================================
 
     story_container = st.container()
 
@@ -2314,18 +2433,14 @@ if page == "📖 主線劇情":
                     text
                 )
 
-        # =================================================
-        # 自動捲到底 Anchor
-        # =================================================
-
         st.markdown(
             '<div id="story-bottom"></div>',
             unsafe_allow_html=True
         )
 
-    # =====================================================
+    # -----------------------------------------------------
     # Auto Scroll
-    # =====================================================
+    # -----------------------------------------------------
 
     if st.session_state.get(
         "scroll_to_bottom",
@@ -2384,9 +2499,9 @@ if page == "📖 主線劇情":
             "current_options"
         ] = options
 
-    # =====================================================
+    # -----------------------------------------------------
     # Options
-    # =====================================================
+    # -----------------------------------------------------
 
     for idx, option in enumerate(
         options
@@ -2416,9 +2531,9 @@ if page == "📖 主線劇情":
 
                 st.rerun()
 
-    # =====================================================
+    # -----------------------------------------------------
     # Free Action
-    # =====================================================
+    # -----------------------------------------------------
 
     st.markdown("---")
 
@@ -2433,7 +2548,8 @@ if page == "📖 主線劇情":
 
     if st.button(
         "✍️ 執行自由行動",
-        use_container_width=True
+        use_container_width=True,
+        key="custom_action_button"
     ):
 
         if custom_action.strip():
@@ -2447,8 +2563,19 @@ if page == "📖 主線劇情":
                     custom_action.strip()
                 )
 
-                # 清除輸入框
-                st.session_state.custom_action_input = ""
+                # -------------------------------------------------
+                # 注意：
+                # text_input 本身係 widget，
+                # 點擊 button 後已經建立過。
+                #
+                # 所以唔直接：
+                #
+                # st.session_state.custom_action_input = ""
+                #
+                # 避免另一個 Streamlit widget state error。
+                # -------------------------------------------------
+
+                st.session_state.pending_clear_custom_action = True
 
                 st.rerun()
 
@@ -2460,7 +2587,7 @@ if page == "📖 主線劇情":
 
 
 # =========================================================
-# 27. 背包
+# 29. 背包
 # =========================================================
 
 elif page == "🎒 背包":
@@ -2518,27 +2645,21 @@ elif page == "🎒 背包":
 
     if st.button(
         "📖 返回主線劇情",
-        use_container_width=True
+        use_container_width=True,
+        key="inventory_back_button"
     ):
 
-        # =================================================
-        # 這裡唔直接改 radio widget
-        # 而係用 pending page
-        # =================================================
+        st.session_state.pending_game_page = (
+            "📖 主線劇情"
+        )
 
-        st.session_state[
-            "pending_game_page"
-        ] = "📖 主線劇情"
-
-        st.session_state[
-            "scroll_to_bottom"
-        ] = True
+        st.session_state.scroll_to_bottom = True
 
         st.rerun()
 
 
 # =========================================================
-# 28. NPC
+# 30. NPC
 # =========================================================
 
 elif page == "👥 人物關係":
@@ -2608,22 +2729,21 @@ elif page == "👥 人物關係":
 
     if st.button(
         "📖 返回主線劇情",
-        use_container_width=True
+        use_container_width=True,
+        key="npc_back_button"
     ):
 
-        st.session_state[
-            "pending_game_page"
-        ] = "📖 主線劇情"
+        st.session_state.pending_game_page = (
+            "📖 主線劇情"
+        )
 
-        st.session_state[
-            "scroll_to_bottom"
-        ] = True
+        st.session_state.scroll_to_bottom = True
 
         st.rerun()
 
 
 # =========================================================
-# 29. 存檔 / 讀檔
+# 31. 存檔 / 讀檔
 # =========================================================
 
 elif page == "💾 存檔／讀檔":
@@ -2659,7 +2779,8 @@ elif page == "💾 存檔／讀檔":
 
     if st.button(
         "🔄 確認載入",
-        use_container_width=True
+        use_container_width=True,
+        key="load_save_button"
     ):
 
         if load_string.strip():
@@ -2697,26 +2818,42 @@ elif page == "💾 存檔／讀檔":
 
     if st.button(
         "📖 返回主線劇情",
-        use_container_width=True
+        use_container_width=True,
+        key="save_back_button"
     ):
 
-        st.session_state[
-            "pending_game_page"
-        ] = "📖 主線劇情"
+        st.session_state.pending_game_page = (
+            "📖 主線劇情"
+        )
 
-        st.session_state[
-            "scroll_to_bottom"
-        ] = True
+        st.session_state.scroll_to_bottom = True
 
         st.rerun()
 
 
 # =========================================================
-# 30. Footer
+# 32. 清除自由行動輸入框
+# =========================================================
+#
+# 注意：
+# Streamlit widget 建立之後不能直接改 widget key。
+#
+# 所以呢個版本不再嘗試：
+#
+# st.session_state.custom_action_input = ""
+#
+# 如果要真正清空，可以使用不同 widget key 或 callback。
+#
+# 目前先保留輸入內容，避免另一個 API Exception。
+# =========================================================
+
+
+# =========================================================
+# 33. Footer
 # =========================================================
 
 st.markdown("---")
 
 st.caption(
-    "三界奇譚 V3.4 · Nemotron Free · 修仙文字 RPG"
+    "三界奇譚 V3.5 · Nemotron Free · 修仙文字 RPG"
 )
