@@ -26,12 +26,9 @@ st.set_page_config(
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-PRIMARY_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+PRIMARY_MODEL = "openrouter/free"
 
-BACKUP_MODELS = [
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemini-2.0-flash-exp:free",
-]
+BACKUP_MODELS = []
 
 APP_VERSION = "V3.5"
 
@@ -878,9 +875,8 @@ def call_nemotron(
             "Three Realms RPG",
     }
 
-    payload = {
+   payload = {
     "model": PRIMARY_MODEL,
-    "models": BACKUP_MODELS,
     "messages": messages,
     "temperature": 0.8,
     "max_tokens": 2500,
