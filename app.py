@@ -471,30 +471,39 @@ def call_nemotron(messages):
         "max_tokens": 2500
     }
 
-    response = requests.post(
-        OPENROUTER_URL,
-        headers=headers,
-        json=payload,
-        timeout=120
-    )
-
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"OpenRouter API 錯誤 {response.status_code}: "
-            f"{response.text[:1000]}"
+    try:
+        response = requests.post(
+            OPENROUTER_URL,
+            headers=headers,
+            json=payload,
+            timeout=120
         )
 
-    result = response.json()
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"OpenRouter API 錯誤 {response.status_code}: "
+                f"{response.text[:1000]}"
+            )
 
-    if "choices" not in result or not result["choices"]:
-        raise RuntimeError(f"模型沒有返回有效結果：{result}")
+        result = response.json()
 
-    content = result["choices"][0]["message"]["content"]
+        if "choices" not in result or not result["choices"]:
+            raise RuntimeError(
+                f"模型沒有返回有效結果：{result}"
+            )
 
-    if not content:
-        raise RuntimeError("Nemotron 返回空白內容。")
+        content = result["choices"][0]["message"]["content"]
 
-    return content
+        if not content:
+            raise RuntimeError("Nemotron 返回空白內容。")
+
+        return content
+
+    except requests.exceptions.Timeout:
+        raise RuntimeError("Nemotron 回應逾時，請稍後再試。")
+
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"連接 OpenRouter 失敗：{str(e)}")
 
 # =========================================================
 # 11. 建立遊戲 Prompt
