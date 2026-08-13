@@ -842,7 +842,7 @@ def clean_api_key_for_header(key):
 # 10. API 呼叫
 # =========================================================
 
-def call_nemotron(messages):
+def call_nemotron(messages, status_callback=None):
 
     api_key = clean_api_key_for_header(
         OPENROUTER_API_KEY
@@ -854,42 +854,48 @@ def call_nemotron(messages):
         )
 
     headers = {
-        "Authorization": "Bearer " + api_key,
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "HTTP-Referer": "https://openrouter.ai",
+        "HTTP-Referer": "https://openrouter.ai/",
         "X-Title": "Three Realms RPG",
     }
 
     # =====================================================
-    # 模型設定
+    # 模型列表
+    #
+    # 第一個失敗會自動試下一個
     # =====================================================
 
-    primary_model = (
-        "nvidia/nemotron-3-ultra-550b-a55b:free"
-    )
+    models_to_try = [
+        "openrouter/free",
 
-    backup_models = [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+
         "meta-llama/llama-3.3-70b-instruct:free",
+
         "google/gemini-2.0-flash-exp:free",
     ]
 
-    models_to_try = [
-        primary_model
-    ] + backup_models
-
     last_error = None
 
-    # =====================================================
-    # 依次嘗試主模型及備用模型
-    # =====================================================
+    for model_index, model_name in enumerate(
+        models_to_try
+    ):
 
-    for model_name in models_to_try:
+        if status_callback:
+
+            status_callback(
+                f"🔮 正在使用模型：{model_name}"
+            )
 
         payload = {
             "model": model_name,
+
             "messages": messages,
+
             "temperature": 0.8,
+
             "max_tokens": 2500,
         }
 
@@ -897,18 +903,12 @@ def call_nemotron(messages):
 
             response = requests.post(
                 OPENROUTER_URL,
+
                 headers=headers,
+
                 json=payload,
+
                 timeout=120,
-            )
-
-        except UnicodeEncodeError as error:
-
-            raise RuntimeError(
-                "API Header 含有無法傳送的特殊字元。\n\n"
-                "請檢查 Streamlit Secrets 裡面的 "
-                "OPENROUTER_API_KEY。\n\n"
-                f"詳細錯誤：{error}"
             )
 
         except requests.exceptions.Timeout:
@@ -916,6 +916,13 @@ def call_nemotron(messages):
             last_error = (
                 f"模型 {model_name} 回應逾時。"
             )
+
+            if status_callback:
+
+                status_callback(
+                    f"⏱️ {model_name} 回應逾時，"
+                    "正在嘗試下一個模型……"
+                )
 
             continue
 
@@ -926,10 +933,26 @@ def call_nemotron(messages):
                 + str(error)
             )
 
+            if status_callback:
+
+                status_callback(
+                    f"⚠️ {model_name} 連接失敗，"
+                    "正在嘗試下一個模型……"
+                )
+
             continue
 
+        except UnicodeEncodeError as error:
+
+            raise RuntimeError(
+                "API Header 含有無法傳送的特殊字元。\n\n"
+                "請檢查 Streamlit Secrets 裡面的 "
+                "OPENROUTER_API_KEY。\n\n"
+                f"詳細錯誤：{error}"
+            )
+
         # =================================================
-        # HTTP 錯誤
+        # HTTP 200
         # =================================================
 
         if response.status_code == 200:
@@ -946,24 +969,39 @@ def call_nemotron(messages):
 
                 continue
 
+            # ---------------------------------------------
+            # API JSON 裡面仍然可能有 error
+            # ---------------------------------------------
+
             if "error" in result:
 
-                last_error = (
-                    f"模型 {model_name} 發生錯誤："
-                    + json.dumps(
-                        result.get("error"),
-                        ensure_ascii=False
+                error_obj = result.get(
+                    "error",
+                    {}
+                )
+
+                error_message = str(
+                    error_obj.get(
+                        "message",
+                        "未知 API 錯誤"
                     )
+                )
+
+                last_error = (
+                    f"模型：{model_name}\n"
+                    f"API 錯誤：{error_message}"
                 )
 
                 continue
 
-            choices = result.get("choices")
+            choices = result.get(
+                "choices"
+            )
 
             if not choices:
 
                 last_error = (
-                    f"模型 {model_name} 沒有返回有效結果。"
+                    f"模型 {model_name} 沒有返回 choices。"
                 )
 
                 continue
@@ -978,25 +1016,49 @@ def call_nemotron(messages):
                 ""
             )
 
-            if isinstance(content, list):
+            # ---------------------------------------------
+            # 某些模型 content 可能係 list
+            # ---------------------------------------------
+
+            if isinstance(
+                content,
+                list
+            ):
 
                 parts = []
 
                 for part in content:
 
-                    if isinstance(part, dict):
+                    if isinstance(
+                        part,
+                        dict
+                    ):
 
                         if "text" in part:
 
                             parts.append(
-                                str(part["text"])
+                                str(
+                                    part["text"]
+                                )
                             )
 
-                content = "".join(parts)
+                content = "".join(
+                    parts
+                )
+
+            content = str(
+                content
+            ).strip()
 
             if content:
 
-                return str(content)
+                if status_callback:
+
+                    status_callback(
+                        f"✅ {model_name} 回應成功"
+                    )
+
+                return content
 
             last_error = (
                 f"模型 {model_name} 返回空白內容。"
@@ -1005,67 +1067,127 @@ def call_nemotron(messages):
             continue
 
         # =================================================
-        # 401：API Key 問題，不需要繼續試模型
+        # 401
         # =================================================
 
         if response.status_code == 401:
 
             raise RuntimeError(
                 "OpenRouter API Key 無效或未授權。\n\n"
-                "請到 Streamlit Secrets 檢查 "
-                "OPENROUTER_API_KEY。"
+                "請到 Streamlit Secrets 檢查：\n\n"
+                "OPENROUTER_API_KEY"
             )
 
         # =================================================
-        # 429：Rate Limit → 自動下一個模型
+        # 403
+        # =================================================
+
+        if response.status_code == 403:
+
+            try:
+
+                error_data = response.json()
+
+                error_obj = error_data.get(
+                    "error",
+                    {}
+                )
+
+                error_message = str(
+                    error_obj.get(
+                        "message",
+                        "Access denied"
+                    )
+                )
+
+            except Exception:
+
+                error_message = response.text[:1000]
+
+            last_error = (
+                f"模型：{model_name}\n"
+                f"HTTP：403\n"
+                f"原因：{error_message}"
+            )
+
+            if status_callback:
+
+                status_callback(
+                    f"🚫 {model_name} 無法使用，"
+                    "正在嘗試下一個模型……"
+                )
+
+            continue
+
+        # =================================================
+        # 429 Rate Limit
         # =================================================
 
         if response.status_code == 429:
 
-    try:
-        error_data = response.json()
+            try:
 
-        error_obj = error_data.get(
-            "error",
-            {}
-        )
+                error_data = response.json()
 
-        error_message = str(
-            error_obj.get(
-                "message",
-                "未知 Rate Limit"
-            )
-        )
+                error_obj = error_data.get(
+                    "error",
+                    {}
+                )
 
-        error_metadata = error_obj.get(
-            "metadata",
-            {}
-        )
+                error_message = str(
+                    error_obj.get(
+                        "message",
+                        "Rate Limit"
+                    )
+                )
 
-        last_error = (
-            f"模型：{model_name}\n"
-            f"HTTP：429\n"
-            f"原因：{error_message}\n"
-            f"詳細資料："
-            + json.dumps(
-                error_metadata,
-                ensure_ascii=False
-            )
-        )
+                metadata = error_obj.get(
+                    "metadata",
+                    {}
+                )
 
-    except Exception:
+                # -----------------------------------------
+                # 取得可能存在的 rate limit 詳情
+                # -----------------------------------------
 
-        last_error = (
-            f"模型：{model_name}\n"
-            f"HTTP：429\n"
-            f"OpenRouter："
-            + response.text[:1000]
-        )
+                last_error = (
+                    f"模型：{model_name}\n"
+                    f"HTTP：429\n"
+                    f"原因：{error_message}\n"
+                    f"詳細資料："
+                    + json.dumps(
+                        metadata,
+                        ensure_ascii=False
+                    )
+                )
 
-    continue
+            except Exception:
+
+                last_error = (
+                    f"模型：{model_name}\n"
+                    f"HTTP：429\n"
+                    f"OpenRouter："
+                    + response.text[:1000]
+                )
+
+            # ---------------------------------------------
+            # 429 唔停，繼續下一個模型
+            # ---------------------------------------------
+
+            if status_callback:
+
+                status_callback(
+                    f"⚠️ {model_name} 受到 429 Rate Limit，"
+                    "正在嘗試備用模型……"
+                )
+
+            # 小幅等待，避免即刻連續撞 API
+            time.sleep(1)
+
+            continue
 
         # =================================================
-        # 其他暫時性 Server Error
+        # 500 / 502 / 503 / 504
         # =================================================
 
         if response.status_code in (
@@ -1079,6 +1201,15 @@ def call_nemotron(messages):
                 f"模型 {model_name} 暫時無法使用 "
                 f"（HTTP {response.status_code}）。"
             )
+
+            if status_callback:
+
+                status_callback(
+                    f"⚠️ {model_name} 暫時不可用，"
+                    "正在嘗試下一個模型……"
+                )
+
+            time.sleep(1)
 
             continue
 
@@ -1105,11 +1236,11 @@ def call_nemotron(messages):
             f"{error_text[:1500]}"
         )
 
-        # 其他錯誤不盲目繼續
+        # 非預期錯誤
         break
 
     # =====================================================
-    # 所有模型都失敗
+    # 所有模型失敗
     # =====================================================
 
     raise RuntimeError(
@@ -1119,7 +1250,6 @@ def call_nemotron(messages):
             or "未知 API 錯誤"
         )
     )
-
 
 # =========================================================
 # 11. 清理模型輸出
