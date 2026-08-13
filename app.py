@@ -26,7 +26,12 @@ st.set_page_config(
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-MODEL_NAME = "nvidia/nemotron-3-ultra-550b-a55b:free"
+PRIMARY_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+
+BACKUP_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+]
 
 APP_VERSION = "V3.5"
 
