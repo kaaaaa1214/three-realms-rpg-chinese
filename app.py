@@ -450,11 +450,9 @@ def parse_json_response(text):
 def call_nemotron(messages):
 
     headers = {
-        "Authorization": "Bearer " + api_key,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://streamlit.io",
-        "X-Title": "三界奇譚"
-    }
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json"
+}
 
     payload = {
         "model": MODEL_NAME,
