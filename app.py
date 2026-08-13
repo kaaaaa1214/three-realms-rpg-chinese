@@ -879,19 +879,12 @@ def call_nemotron(
     }
 
     payload = {
-
-        "model":
-            MODEL_NAME,
-
-        "messages":
-            messages,
-
-        "temperature":
-            0.8,
-
-        "max_tokens":
-            2500,
-    }
+    "model": PRIMARY_MODEL,
+    "models": BACKUP_MODELS,
+    "messages": messages,
+    "temperature": 0.8,
+    "max_tokens": 2500,
+}
 
     if status_callback:
         status_callback(
