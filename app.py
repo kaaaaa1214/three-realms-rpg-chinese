@@ -842,98 +842,213 @@ def clean_api_key_for_header(key):
 # 10. API 呼叫
 # =========================================================
 
-def call_nemotron(
-    messages,
-    status_callback=None
-):
+def call_nemotron(messages):
 
     api_key = clean_api_key_for_header(
         OPENROUTER_API_KEY
     )
 
     if not api_key:
-
         raise RuntimeError(
             "OpenRouter API Key 是空白的。"
         )
 
     headers = {
-
-        "Authorization":
-            "Bearer " + api_key,
-
-        "Content-Type":
-            "application/json",
-
-        "Accept":
-            "application/json",
-
-        "HTTP-Referer":
-            "https://openrouter.ai",
-
-        "X-Title":
-            "Three Realms RPG",
+        "Authorization": "Bearer " + api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "HTTP-Referer": "https://openrouter.ai",
+        "X-Title": "Three Realms RPG",
     }
 
-   payload = {
-    "model": PRIMARY_MODEL,
-    "messages": messages,
-    "temperature": 0.8,
-    "max_tokens": 2500,
-}
-    if status_callback:
-        status_callback(
-            "📡 正在連接 AI……"
-        )
+    # =====================================================
+    # 模型設定
+    # =====================================================
 
-    try:
+    primary_model = (
+        "nvidia/nemotron-3-ultra-550b-a55b:free"
+    )
 
-        response = requests.post(
-            OPENROUTER_URL,
-            headers=headers,
-            json=payload,
-            timeout=120,
-        )
+    backup_models = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+    ]
 
-    except UnicodeEncodeError as error:
+    models_to_try = [
+        primary_model
+    ] + backup_models
 
-        raise RuntimeError(
-            "API Header 出現 Unicode 編碼錯誤。\n\n"
-            "請重新檢查 OPENROUTER_API_KEY。\n\n"
-            f"詳細：{error}"
-        )
+    last_error = None
 
-    except requests.exceptions.Timeout:
+    # =====================================================
+    # 依次嘗試主模型及備用模型
+    # =====================================================
 
-        raise RuntimeError(
-            "AI 回應逾時。\n\n"
-            "模型可能正在繁忙，請再試一次。"
-        )
+    for model_name in models_to_try:
 
-    except requests.exceptions.ConnectionError:
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": 0.8,
+            "max_tokens": 2500,
+        }
 
-        raise RuntimeError(
-            "無法連接 OpenRouter。\n\n"
-            "請檢查網絡或稍後再試。"
-        )
+        try:
 
-    except requests.exceptions.RequestException as error:
+            response = requests.post(
+                OPENROUTER_URL,
+                headers=headers,
+                json=payload,
+                timeout=120,
+            )
 
-        raise RuntimeError(
-            "OpenRouter 連線失敗：\n"
-            + str(error)
-        )
+        except UnicodeEncodeError as error:
 
-    if status_callback:
-        status_callback(
-            "📨 AI 已回應，正在讀取結果……"
-        )
+            raise RuntimeError(
+                "API Header 含有無法傳送的特殊字元。\n\n"
+                "請檢查 Streamlit Secrets 裡面的 "
+                "OPENROUTER_API_KEY。\n\n"
+                f"詳細錯誤：{error}"
+            )
 
-    # -----------------------------------------------------
-    # HTTP Status
-    # -----------------------------------------------------
+        except requests.exceptions.Timeout:
 
-    if response.status_code != 200:
+            last_error = (
+                f"模型 {model_name} 回應逾時。"
+            )
+
+            continue
+
+        except requests.exceptions.RequestException as error:
+
+            last_error = (
+                f"模型 {model_name} 連接失敗："
+                + str(error)
+            )
+
+            continue
+
+        # =================================================
+        # HTTP 錯誤
+        # =================================================
+
+        if response.status_code == 200:
+
+            try:
+
+                result = response.json()
+
+            except Exception:
+
+                last_error = (
+                    f"模型 {model_name} 返回的內容不是有效 JSON。"
+                )
+
+                continue
+
+            if "error" in result:
+
+                last_error = (
+                    f"模型 {model_name} 發生錯誤："
+                    + json.dumps(
+                        result.get("error"),
+                        ensure_ascii=False
+                    )
+                )
+
+                continue
+
+            choices = result.get("choices")
+
+            if not choices:
+
+                last_error = (
+                    f"模型 {model_name} 沒有返回有效結果。"
+                )
+
+                continue
+
+            message = choices[0].get(
+                "message",
+                {}
+            )
+
+            content = message.get(
+                "content",
+                ""
+            )
+
+            if isinstance(content, list):
+
+                parts = []
+
+                for part in content:
+
+                    if isinstance(part, dict):
+
+                        if "text" in part:
+
+                            parts.append(
+                                str(part["text"])
+                            )
+
+                content = "".join(parts)
+
+            if content:
+
+                return str(content)
+
+            last_error = (
+                f"模型 {model_name} 返回空白內容。"
+            )
+
+            continue
+
+        # =================================================
+        # 401：API Key 問題，不需要繼續試模型
+        # =================================================
+
+        if response.status_code == 401:
+
+            raise RuntimeError(
+                "OpenRouter API Key 無效或未授權。\n\n"
+                "請到 Streamlit Secrets 檢查 "
+                "OPENROUTER_API_KEY。"
+            )
+
+        # =================================================
+        # 429：Rate Limit → 自動下一個模型
+        # =================================================
+
+        if response.status_code == 429:
+
+            last_error = (
+                f"模型 {model_name} 目前受到 429 Rate Limit。"
+            )
+
+            continue
+
+        # =================================================
+        # 其他暫時性 Server Error
+        # =================================================
+
+        if response.status_code in (
+            500,
+            502,
+            503,
+            504,
+        ):
+
+            last_error = (
+                f"模型 {model_name} 暫時無法使用 "
+                f"（HTTP {response.status_code}）。"
+            )
+
+            continue
+
+        # =================================================
+        # 其他錯誤
+        # =================================================
 
         try:
 
@@ -948,125 +1063,25 @@ def call_nemotron(
 
             error_text = response.text
 
-        if response.status_code == 401:
-
-            raise RuntimeError(
-                "❌ OpenRouter API Key 無效或未授權。\n\n"
-                "請檢查 Streamlit Secrets。"
-            )
-
-        if response.status_code == 402:
-
-            raise RuntimeError(
-                "❌ OpenRouter 回覆 402。\n\n"
-                "目前模型／帳戶可能沒有足夠額度。"
-            )
-
-        if response.status_code == 429:
-
-            raise RuntimeError(
-                "⏳ OpenRouter 回覆 429。\n\n"
-                "代表目前受到 Rate Limit 限制，"
-                "或者免費模型暫時繁忙。\n\n"
-                "請稍後再試。"
-            )
-
-        if response.status_code >= 500:
-
-            raise RuntimeError(
-                "☁️ OpenRouter 伺服器暫時出現問題。\n\n"
-                f"HTTP {response.status_code}\n\n"
-                f"{error_text[:1200]}"
-            )
-
-        raise RuntimeError(
-            f"OpenRouter API 錯誤：HTTP "
-            f"{response.status_code}\n\n"
+        last_error = (
+            f"OpenRouter API 錯誤 "
+            f"{response.status_code}：\n"
             f"{error_text[:1500]}"
         )
 
-    # -----------------------------------------------------
-    # JSON
-    # -----------------------------------------------------
+        # 其他錯誤不盲目繼續
+        break
 
-    try:
+    # =====================================================
+    # 所有模型都失敗
+    # =====================================================
 
-        result = response.json()
-
-    except Exception:
-
-        raise RuntimeError(
-            "OpenRouter 返回內容不是有效 JSON。"
+    raise RuntimeError(
+        "所有可用模型目前都無法回應。\n\n"
+        + str(
+            last_error
+            or "未知 API 錯誤"
         )
-
-    if "error" in result:
-
-        raise RuntimeError(
-            "模型 API 發生錯誤：\n"
-            + json.dumps(
-                result.get("error"),
-                ensure_ascii=False
-            )
-        )
-
-    choices = result.get(
-        "choices"
-    )
-
-    if not choices:
-
-        raise RuntimeError(
-            "模型沒有返回 choices。"
-        )
-
-    message = choices[0].get(
-        "message",
-        {}
-    )
-
-    content = message.get(
-        "content",
-        ""
-    )
-
-    # -----------------------------------------------------
-    # 部分模型可能返回 list
-    # -----------------------------------------------------
-
-    if isinstance(
-        content,
-        list
-    ):
-
-        parts = []
-
-        for part in content:
-
-            if isinstance(
-                part,
-                dict
-            ):
-
-                if "text" in part:
-
-                    parts.append(
-                        str(
-                            part["text"]
-                        )
-                    )
-
-        content = "".join(
-            parts
-        )
-
-    if not content:
-
-        raise RuntimeError(
-            "Nemotron 返回空白內容。"
-        )
-
-    return str(
-        content
     )
 
 
