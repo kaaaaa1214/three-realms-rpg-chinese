@@ -448,25 +448,19 @@ def parse_json_response(text):
 # =========================================================
 
 def call_nemotron(messages):
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError("找不到 OPENROUTER_API_KEY，請檢查 Streamlit Secrets。")
 
     headers = {
-    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-    "Content-Type": "application/json"
-}
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
     payload = {
-        "model": MODEL_NAME,
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
         "messages": messages,
-
-        # 降低劇情亂跳
-        "temperature": 0.75,
-
-        # 避免輸出太長
-        "max_tokens": 1800,
-
-        "top_p": 0.9,
-
-        "stream": False
+        "temperature": 0.8,
+        "max_tokens": 2500
     }
 
     response = requests.post(
@@ -477,44 +471,20 @@ def call_nemotron(messages):
     )
 
     if response.status_code != 200:
-
-        try:
-            error_data = response.json()
-
-            error_message = (
-                error_data
-                .get("error", {})
-                .get("message", "未知 API 錯誤")
-            )
-
-        except Exception:
-
-            error_message = response.text
-
         raise RuntimeError(
-            "API 錯誤 "
-            + str(response.status_code)
-            + "："
-            + str(error_message)
+            f"OpenRouter API 錯誤 {response.status_code}: "
+            f"{response.text[:1000]}"
         )
 
-    data = response.json()
+    result = response.json()
 
-    try:
+    if "choices" not in result or not result["choices"]:
+        raise RuntimeError(f"模型沒有返回有效結果：{result}")
 
-        content = (
-            data["choices"][0]["message"]["content"]
-        )
+    content = result["choices"][0]["message"]["content"]
 
-    except Exception:
-
-        raise RuntimeError(
-            "API 回應格式異常："
-            + json.dumps(
-                data,
-                ensure_ascii=False
-            )[:2000]
-        )
+    if not content:
+        raise RuntimeError("Nemotron 返回空白內容。")
 
     return content
 
