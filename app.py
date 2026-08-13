@@ -1022,11 +1022,47 @@ def call_nemotron(messages):
 
         if response.status_code == 429:
 
-            last_error = (
-                f"模型 {model_name} 目前受到 429 Rate Limit。"
-            )
+    try:
+        error_data = response.json()
 
-            continue
+        error_obj = error_data.get(
+            "error",
+            {}
+        )
+
+        error_message = str(
+            error_obj.get(
+                "message",
+                "未知 Rate Limit"
+            )
+        )
+
+        error_metadata = error_obj.get(
+            "metadata",
+            {}
+        )
+
+        last_error = (
+            f"模型：{model_name}\n"
+            f"HTTP：429\n"
+            f"原因：{error_message}\n"
+            f"詳細資料："
+            + json.dumps(
+                error_metadata,
+                ensure_ascii=False
+            )
+        )
+
+    except Exception:
+
+        last_error = (
+            f"模型：{model_name}\n"
+            f"HTTP：429\n"
+            f"OpenRouter："
+            + response.text[:1000]
+        )
+
+    continue
 
         # =================================================
         # 其他暫時性 Server Error
