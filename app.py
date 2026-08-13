@@ -4,17 +4,18 @@ import json
 import random
 import re
 import time
+import copy
 
 
 # =========================================================
-# 1. 頁面設定
+# 1. Streamlit 頁面設定
 # =========================================================
 
 st.set_page_config(
     page_title="三界奇譚：小薯逆襲記",
     page_icon="🌸",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
 
@@ -26,51 +27,135 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 MODEL_NAME = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
-OPENROUTER_API_KEY = st.secrets.get(
-    "OPENROUTER_API_KEY",
-    ""
-).strip()
+
+def get_api_key():
+    """
+    從 Streamlit Secrets 取得 API Key。
+    同時清除頭尾空白及換行。
+    """
+
+    try:
+        key = st.secrets.get("OPENROUTER_API_KEY", "")
+    except Exception:
+        key = ""
+
+    if key is None:
+        return ""
+
+    key = str(key).strip()
+
+    return key
+
+
+OPENROUTER_API_KEY = get_api_key()
+
+
+# =========================================================
+# 3. API Key 檢查
+# =========================================================
 
 if not OPENROUTER_API_KEY:
+
     st.error(
         "⚠️ 找不到 OPENROUTER_API_KEY。\n\n"
-        "請到 Streamlit Cloud → Settings → Secrets 設定：\n\n"
-        "OPENROUTER_API_KEY = \"你的 API Key\""
+        "請到 Streamlit Cloud → Settings → Secrets 設定。"
     )
+
+    st.code(
+        'OPENROUTER_API_KEY = "sk-or-v1-你的API-Key"',
+        language="toml"
+    )
+
     st.stop()
 
 
 # =========================================================
-# 3. 遊戲世界
+# 4. 檢查 API Key 是否含有非法 Header 字元
+# =========================================================
+
+def validate_api_key(key):
+
+    if not isinstance(key, str):
+        return False, "API Key 不是文字格式。"
+
+    key = key.strip()
+
+    if not key:
+        return False, "API Key 是空白。"
+
+    # HTTP header 只接受 ASCII 最安全
+    try:
+        key.encode("ascii")
+    except UnicodeEncodeError:
+        return (
+            False,
+            "API Key 入面含有非 ASCII 字元。"
+            "請重新複製 OpenRouter API Key，"
+            "不要加入中文、引號或其他文字。"
+        )
+
+    # 防止 Secret 被誤加 Bearer
+    if key.lower().startswith("bearer "):
+        return (
+            False,
+            "Streamlit Secrets 入面只需要 API Key，"
+            "不要加入 Bearer。"
+        )
+
+    return True, ""
+
+
+api_key_valid, api_key_error = validate_api_key(
+    OPENROUTER_API_KEY
+)
+
+
+if not api_key_valid:
+
+    st.error("⚠️ OpenRouter API Key 設定有問題")
+
+    st.warning(api_key_error)
+
+    st.code(
+        'OPENROUTER_API_KEY = "sk-or-v1-xxxxxxxx"',
+        language="toml"
+    )
+
+    st.stop()
+
+
+# =========================================================
+# 5. 遊戲世界資料
 # =========================================================
 
 LOCATIONS = [
     {
         "loc": "凡間·青石鎮",
         "identity": "街頭討生活的落魄孤兒",
-        "bg": "你無父無母，只能靠替人跑腿、搬貨與偶爾乞討維生。",
+        "bg": "你無父無母，只能靠替人跑腿、搬貨與偶爾乞討維生。"
     },
     {
         "loc": "仙界·凌霄外園",
         "identity": "九霄雲宮最底層雜役",
-        "bg": "你每日清掃落花、挑水與處理雜務，在仙界眾生眼中幾乎毫無地位。",
+        "bg": "你每日清掃落花、挑水與處理雜務，在仙界眾生眼中幾乎毫無地位。"
     },
     {
         "loc": "妖界·萬妖山脈",
         "identity": "被遺棄在山脈外圍的半妖",
-        "bg": "你的血統混雜，因此受到妖族排斥，只能在危險山林邊緣求生。",
+        "bg": "你的血統混雜，因此受到妖族排斥，只能在危險山林邊緣求生。"
     },
     {
         "loc": "魔界·黑焰礦區",
         "identity": "最低階的魔鐵礦奴",
-        "bg": "你每日挖掘魔鐵，承受魔氣侵蝕與監工驅使，只求活過今天。",
+        "bg": "你每日挖掘魔鐵，承受魔氣侵蝕與監工驅使，只求活過今天。"
     },
     {
         "loc": "靈界·散修坊市",
         "identity": "擺地攤維生的落魄散修",
-        "bg": "你的靈根普通，功法殘缺，平日靠替人尋物與販賣雜物勉強維生。",
-    },
+        "bg": "你的靈根普通，功法殘缺，平日靠替人尋物與販賣雜物勉強維生。"
+    }
 ]
+
 
 BLOODLINES = [
     "鳳凰涅槃血脈",
@@ -78,37 +163,38 @@ BLOODLINES = [
     "太古星辰帝君遺脈",
     "九幽妖皇真靈",
     "混沌天脈",
-    "太初劍骨",
+    "太初劍骨"
 ]
+
 
 STARTING_ITEMS = [
     {
         "name": "粗布麻衣",
         "count": 1,
-        "desc": "洗得發白的粗布衣物，勉強可以遮身。",
+        "desc": "洗得發白的粗布衣物，勉強可以遮身。"
     },
     {
         "name": "乾糧",
         "count": 2,
-        "desc": "粗糙乾糧，可以暫時填飽肚子。",
+        "desc": "粗糙乾糧，可以暫時填飽肚子。"
     },
     {
         "name": "清水",
         "count": 1,
-        "desc": "一小壺普通清水。",
-    },
+        "desc": "一小壺普通清水。"
+    }
 ]
 
 
 # =========================================================
-# 4. 初始化遊戲
+# 6. 初始化遊戲
 # =========================================================
 
 def init_game(player_name):
 
     location = random.choice(LOCATIONS)
 
-    player_name = player_name.strip()
+    player_name = str(player_name).strip()
 
     if not player_name:
         player_name = "詩柔"
@@ -129,9 +215,7 @@ def init_game(player_name):
                 + location["identity"]
             ),
 
-            "secret_bloodline": random.choice(
-                BLOODLINES
-            ),
+            "secret_bloodline": random.choice(BLOODLINES),
 
             "bloodline_awakened": False,
 
@@ -157,13 +241,11 @@ def init_game(player_name):
 
             "righteousness": 0,
             "evil_aura": 0,
-            "fame": 0,
+            "fame": 0
         },
 
-        "inventory": [
-            dict(item)
-            for item in STARTING_ITEMS
-        ],
+        # 使用 deepcopy，避免物品資料互相影響
+        "inventory": copy.deepcopy(STARTING_ITEMS),
 
         "npcs": {},
 
@@ -181,7 +263,7 @@ def init_game(player_name):
 
         "last_story": "",
 
-        "processing": False,
+        "processing": False
     }
 
     opening_story = (
@@ -200,7 +282,7 @@ def init_game(player_name):
         f"五文錢，在這個弱肉強食的世界裡，"
         f"甚至不足以換來一頓像樣的飯。\n\n"
 
-        f"遠處傳來鐘聲。\n"
+        f"遠處傳來鐘聲。"
         f"街道上的人開始活動，新的日子又一次開始。\n\n"
 
         f"然而你不知道的是——"
@@ -217,7 +299,7 @@ def init_game(player_name):
         "檢查身上的物品，看看是否有遺漏的東西。",
         "觀察附近的人群，尋找可以賺錢或獲得食物的機會。",
         "找一個偏僻角落，暗中觀察附近是否藏有異常。",
-        "查看狀態",
+        "查看狀態"
     ]
 
     st.session_state.game_state = state
@@ -225,7 +307,7 @@ def init_game(player_name):
 
 
 # =========================================================
-# 5. 安全數值
+# 7. 數值處理
 # =========================================================
 
 def clamp(value, minimum, maximum):
@@ -235,10 +317,7 @@ def clamp(value, minimum, maximum):
     except Exception:
         value = minimum
 
-    return max(
-        minimum,
-        min(maximum, value)
-    )
+    return max(minimum, min(maximum, value))
 
 
 def normalise_player(player):
@@ -281,7 +360,7 @@ def normalise_player(player):
 
 
 # =========================================================
-# 6. 狀態文字
+# 8. 狀態文字
 # =========================================================
 
 def get_status_text(player):
@@ -305,7 +384,7 @@ def get_status_text(player):
 
 
 # =========================================================
-# 7. System Prompt
+# 9. 系統 Prompt
 # =========================================================
 
 SYSTEM_PROMPT = """
@@ -313,17 +392,19 @@ SYSTEM_PROMPT = """
 
 你負責根據玩家的行動推進劇情。
 
-【語言】
+【最重要規則】
+
+一、語言
 
 全程使用繁體中文。
+
 劇情、人物對話、選項全部使用繁體中文。
 
-不要使用英文。
-不要使用英文縮寫。
-不要輸出 Markdown。
-不要輸出程式碼。
+不要使用英文單字。
+不要使用英文字母。
+不要使用外語。
 
-【敘事】
+二、敘事
 
 使用第二人稱「你」。
 
@@ -333,7 +414,7 @@ SYSTEM_PROMPT = """
 
 人物必須有自己的性格、目的、秘密與利益。
 
-【世界】
+三、世界
 
 這是一個危險的修仙世界。
 
@@ -349,7 +430,7 @@ SYSTEM_PROMPT = """
 
 NPC 可以說謊。
 
-【玩家】
+四、玩家
 
 玩家不是天生無敵。
 
@@ -357,137 +438,98 @@ NPC 可以說謊。
 
 玩家的隱藏血脈絕對不能在沒有合理劇情觸發之前直接說出。
 
-不要直接告訴玩家隱藏血脈名稱。
+五、劇情
 
-【劇情】
-
-每次行動都必須真正推進劇情。
+每次行動推進一段新的劇情。
 
 不要重複上一段。
 
-不要重新描述玩家剛剛已經知道的事情。
+不要把玩家上一個選項原封不動再寫一次。
 
-如果玩家觀察，就必須得到新的資訊。
+不要一直停留在「你觀察四周」。
 
-如果玩家交涉，就必須有 NPC 回應。
+事件必須真正發生。
 
-如果玩家探索，就必須有探索結果。
-
-如果玩家冒險，就必須承擔合理風險。
-
-【回合】
+六、回合
 
 每次只推進一個回合。
 
 不要自行增加回合數。
 
+不要輸出第幾回合。
+
 回合數由遊戲程式處理。
 
-【選項】
+七、選項
 
 每次提供四個新的行動選項。
 
-四個選項應該有不同策略。
+第五個固定是查看狀態。
 
-例如：
+選項必須有不同策略：
 
-探索
-交涉
-冒險
-戰鬥
-利益交換
-逃避
-觀察
-欺騙
+探索、交涉、冒險、戰鬥、利益交換、逃避、觀察等。
 
-第五個選項固定由遊戲程式加入查看狀態。
+八、禁止
 
-【玩家數值】
+不要輸出 Markdown。
 
-只有在劇情合理時才改變玩家數值。
+不要輸出程式碼。
 
-不要隨便讓玩家升級。
+不要輸出 JSON 外的任何內容。
 
-不要隨便讓玩家獲得大量金錢。
+不要輸出程式碼區塊。
 
-不要隨便給予強大神器。
+不要輸出英文。
 
-不要讓玩家突然變得無敵。
+不要輸出 null。
 
-【重要】
+不要輸出 None。
 
-不要輸出玩家完整狀態。
-
-不要修改玩家姓名。
-
-不要修改隱藏血脈。
-
-不要自行增加不存在的屬性。
-
-【輸出】
+九、輸出
 
 只可以輸出合法 JSON。
 
 格式：
 
 {
-  "story": "新的劇情",
-  "story_summary_update": "簡短摘要",
-  "options": [
-    "行動一",
-    "行動二",
-    "行動三",
-    "行動四"
-  ],
-  "player_update": {
-    "hp_change": 0,
-    "mp_change": 0,
-    "fullness_change": 0,
-    "money_change": 0,
-    "realm": "維持不變",
-    "location": "維持不變",
-    "status": "健康"
-  },
-  "inventory_changes": [],
-  "npc_updates": []
+"story": "新的劇情",
+"story_summary_update": "簡短摘要",
+"options": [
+"行動一",
+"行動二",
+"行動三",
+"行動四"
+],
+"player_update": {
+"hp_change": 0,
+"mp_change": 0,
+"fullness_change": 0,
+"money_change": 0,
+"realm": "維持不變",
+"location": "維持不變",
+"status": "健康"
+},
+"inventory_changes": [],
+"npc_updates": []
 }
 
-inventory_changes 格式：
+十、重要
 
-[
-  {
-    "name": "物品名稱",
-    "count_change": 1,
-    "desc": "物品描述"
-  }
-]
+你只負責提出變化。
 
-npc_updates 格式：
+不要重新建立完整玩家狀態。
 
-[
-  {
-    "name": "人物名稱",
-    "identity": "身份",
-    "relationship": "關係",
-    "affinity": 0,
-    "key_memory": "重要記憶"
-  }
-]
+不要修改姓名。
 
-如果沒有變化，使用空陣列。
+不要修改隱藏血脈。
 
-不要輸出 null。
-
-不要輸出 None。
-
-不要輸出 Markdown。
-
-只輸出 JSON。
+不要自行增加不存在的屬性。
 """
 
 
 # =========================================================
-# 8. 清理模型輸出
+# 10. 清理模型輸出
 # =========================================================
 
 def clean_model_text(text):
@@ -497,20 +539,9 @@ def clean_model_text(text):
 
     text = str(text).strip()
 
-    text = text.replace(
-        "```json",
-        ""
-    )
-
-    text = text.replace(
-        "```JSON",
-        ""
-    )
-
-    text = text.replace(
-        "```",
-        ""
-    )
+    text = text.replace("```json", "")
+    text = text.replace("```JSON", "")
+    text = text.replace("```", "")
 
     text = text.strip()
 
@@ -528,7 +559,7 @@ def clean_model_text(text):
 
 
 # =========================================================
-# 9. JSON Parser
+# 11. JSON 解析
 # =========================================================
 
 def parse_json_response(text):
@@ -547,14 +578,13 @@ def parse_json_response(text):
     except Exception:
         pass
 
+    # 嘗試尋找最外層 JSON
     start = cleaned.find("{")
     end = cleaned.rfind("}")
 
     if start >= 0 and end > start:
 
-        candidate = cleaned[
-            start:end + 1
-        ]
+        candidate = cleaned[start:end + 1]
 
         try:
             result = json.loads(candidate)
@@ -569,196 +599,206 @@ def parse_json_response(text):
 
 
 # =========================================================
-# 10. API 錯誤格式化
-# =========================================================
-
-def explain_api_error(status_code, response_text):
-
-    try:
-        error_data = json.loads(
-            response_text
-        )
-
-        message = (
-            error_data
-            .get("error", {})
-            .get("message", "")
-        )
-
-        if message:
-            return message
-
-    except Exception:
-        pass
-
-    if status_code == 401:
-        return (
-            "API Key 無效或未正確設定。"
-        )
-
-    if status_code == 403:
-        return (
-            "OpenRouter 拒絕這次請求，"
-            "可能與 API Key 權限或模型存取權有關。"
-        )
-
-    if status_code == 404:
-        return (
-            "找不到指定模型或 API Endpoint。"
-        )
-
-    if status_code == 408:
-        return (
-            "OpenRouter 請求逾時。"
-        )
-
-    if status_code == 429:
-        return (
-            "OpenRouter 回覆 429："
-            "目前可能達到免費模型的速率限制或配額限制。"
-        )
-
-    if status_code >= 500:
-        return (
-            f"OpenRouter 伺服器錯誤：{status_code}"
-        )
-
-    return (
-        f"OpenRouter API 錯誤：{status_code}"
-    )
-
-
-# =========================================================
-# 11. 呼叫 Nemotron
+# 12. OpenRouter API
 # =========================================================
 
 def call_nemotron(messages):
 
+    api_key = get_api_key()
+
+    valid, error_message = validate_api_key(api_key)
+
+    if not valid:
+        raise RuntimeError(
+            "OpenRouter API Key 設定錯誤："
+            + error_message
+        )
+
     headers = {
-        "Authorization": (
-            f"Bearer {OPENROUTER_API_KEY}"
-        ),
+        "Authorization": "Bearer " + api_key,
         "Content-Type": "application/json",
-        "HTTP-Referer": (
-            "https://three-realms-rpg-chinese.streamlit.app"
-        ),
-        "X-Title": "三界奇譚：小薯逆襲記",
+        "Accept": "application/json"
     }
 
     payload = {
         "model": MODEL_NAME,
         "messages": messages,
         "temperature": 0.8,
-        "max_tokens": 2500,
-        "stream": False,
+        "max_tokens": 2500
     }
 
-    try:
+    last_error = None
 
-        response = requests.post(
-            OPENROUTER_URL,
-            headers=headers,
-            json=payload,
-            timeout=90,
-        )
+    # 最多嘗試三次
+    for attempt in range(3):
 
-    except requests.exceptions.Timeout:
+        try:
 
-        raise RuntimeError(
-            "模型回應超過 90 秒。\n\n"
-            "可能是免費模型目前繁忙，"
-            "請稍後再試。"
-        )
+            response = requests.post(
+                OPENROUTER_URL,
+                headers=headers,
+                json=payload,
+                timeout=120
+            )
 
-    except requests.exceptions.ConnectionError:
+            # 成功
+            if response.status_code == 200:
 
-        raise RuntimeError(
-            "無法連接 OpenRouter。\n\n"
-            "請檢查 Streamlit Cloud 網絡狀態。"
-        )
+                result = response.json()
 
-    except requests.exceptions.RequestException as error:
+                choices = result.get(
+                    "choices",
+                    []
+                )
 
-        raise RuntimeError(
-            f"連接 OpenRouter 失敗：{error}"
-        )
-
-    if response.status_code != 200:
-
-        detail = explain_api_error(
-            response.status_code,
-            response.text[:3000]
-        )
-
-        raise RuntimeError(
-            detail
-            + "\n\n"
-            + f"HTTP 狀態碼：{response.status_code}"
-        )
-
-    try:
-
-        result = response.json()
-
-    except Exception:
-
-        raise RuntimeError(
-            "OpenRouter 返回的內容不是有效 JSON。"
-        )
-
-    choices = result.get(
-        "choices",
-        []
-    )
-
-    if not choices:
-
-        raise RuntimeError(
-            "OpenRouter 沒有返回模型結果。"
-        )
-
-    message = choices[0].get(
-        "message",
-        {}
-    )
-
-    content = message.get(
-        "content",
-        ""
-    )
-
-    if isinstance(content, list):
-
-        parts = []
-
-        for item in content:
-
-            if isinstance(item, dict):
-
-                if item.get("type") == "text":
-
-                    parts.append(
-                        str(
-                            item.get(
-                                "text",
-                                ""
-                            )
-                        )
+                if not choices:
+                    raise RuntimeError(
+                        "OpenRouter 沒有返回模型結果。"
                     )
 
-        content = "".join(parts)
+                message = choices[0].get(
+                    "message",
+                    {}
+                )
 
-    if not content:
+                content = message.get(
+                    "content",
+                    ""
+                )
 
-        raise RuntimeError(
-            "Nemotron 返回空白內容。"
-        )
+                if not content:
+                    raise RuntimeError(
+                        "模型返回空白內容。"
+                    )
 
-    return str(content)
+                return content
+
+            # API Key 錯誤
+            if response.status_code == 401:
+
+                raise RuntimeError(
+                    "OpenRouter API Key 無效或已失效。"
+                    "請到 OpenRouter 重新確認 API Key。"
+                )
+
+            # Credits 不足
+            if response.status_code == 402:
+
+                raise RuntimeError(
+                    "OpenRouter 帳戶或 API Key 沒有足夠額度。"
+                )
+
+            # Rate Limit
+            if response.status_code == 429:
+
+                retry_after = response.headers.get(
+                    "Retry-After",
+                    "10"
+                )
+
+                try:
+                    wait_seconds = min(
+                        int(retry_after),
+                        30
+                    )
+                except Exception:
+                    wait_seconds = 10
+
+                last_error = (
+                    "OpenRouter 暫時限流。"
+                    f"系統將等待 {wait_seconds} 秒後重試。"
+                )
+
+                if attempt < 2:
+                    time.sleep(wait_seconds)
+                    continue
+
+                raise RuntimeError(last_error)
+
+            # Server error
+            if response.status_code in (
+                500,
+                502,
+                503,
+                504
+            ):
+
+                last_error = (
+                    "OpenRouter 暫時無法提供模型。"
+                    f"伺服器狀態：{response.status_code}"
+                )
+
+                if attempt < 2:
+                    time.sleep(3 + attempt * 3)
+                    continue
+
+                raise RuntimeError(last_error)
+
+            # 其他錯誤
+            try:
+                error_data = response.json()
+
+                error_message = (
+                    error_data
+                    .get("error", {})
+                    .get("message", "")
+                )
+
+            except Exception:
+                error_message = ""
+
+            if not error_message:
+                error_message = response.text[:500]
+
+            raise RuntimeError(
+                "OpenRouter API 錯誤 "
+                + str(response.status_code)
+                + "："
+                + str(error_message)
+            )
+
+        except UnicodeEncodeError as error:
+
+            raise RuntimeError(
+                "HTTP Header 出現非 ASCII 字元。\n\n"
+                "最可能原因是 Streamlit Secrets 裡面的 "
+                "OPENROUTER_API_KEY 被加入了中文、特殊字元、"
+                "引號或不可見字元。\n\n"
+                "請重新複製 API Key，並重新設定 Secrets。"
+            ) from error
+
+        except requests.exceptions.Timeout:
+
+            last_error = (
+                "連接 OpenRouter 逾時。"
+            )
+
+            if attempt < 2:
+                time.sleep(3)
+                continue
+
+            raise RuntimeError(last_error)
+
+        except requests.exceptions.RequestException as error:
+
+            last_error = (
+                "連接 OpenRouter 失敗："
+                + str(error)
+            )
+
+            if attempt < 2:
+                time.sleep(3)
+                continue
+
+            raise RuntimeError(last_error)
+
+    raise RuntimeError(
+        last_error or "OpenRouter 請求失敗。"
+    )
 
 
 # =========================================================
-# 12. 建立遊戲 Prompt
+# 13. 建立遊戲 Prompt
 # =========================================================
 
 def build_game_prompt(action):
@@ -767,132 +807,47 @@ def build_game_prompt(action):
 
     player = game["player"]
 
-    recent_history = (
-        game.get(
-            "story_history",
-            []
-        )[-8:]
-    )
+    recent_history = game["story_history"][-6:]
 
     recent_text = "\n\n".join(
-        recent_history
+        str(x)
+        for x in recent_history
     )
 
     npc_text = json.dumps(
-        game.get(
-            "npcs",
-            {}
-        ),
+        game.get("npcs", {}),
         ensure_ascii=False
     )
 
     inventory_text = json.dumps(
-        game.get(
-            "inventory",
-            []
-        ),
+        game.get("inventory", []),
         ensure_ascii=False
     )
 
-    player_for_model = {
-        "name": player.get(
-            "name",
-            "詩柔"
-        ),
-        "identity": player.get(
-            "identity",
-            ""
-        ),
-        "hp": player.get(
-            "hp",
-            100
-        ),
-        "max_hp": player.get(
-            "max_hp",
-            100
-        ),
-        "mp": player.get(
-            "mp",
-            30
-        ),
-        "max_mp": player.get(
-            "max_mp",
-            30
-        ),
-        "fullness": player.get(
-            "fullness",
-            90
-        ),
-        "money": player.get(
-            "money",
-            5
-        ),
-        "realm": player.get(
-            "realm",
-            "凡俗之軀"
-        ),
-        "location": player.get(
-            "location",
-            ""
-        ),
-        "status": player.get(
-            "status",
-            "健康"
-        ),
-        "comprehension": player.get(
-            "comprehension",
-            10
-        ),
-        "fortune": player.get(
-            "fortune",
-            10
-        ),
-        "charm": player.get(
-            "charm",
-            10
-        ),
-        "righteousness": player.get(
-            "righteousness",
-            0
-        ),
-        "evil_aura": player.get(
-            "evil_aura",
-            0
-        ),
-        "fame": player.get(
-            "fame",
-            0
-        ),
-    }
+    player_text = json.dumps(
+        player,
+        ensure_ascii=False
+    )
 
     prompt = f"""
 【遊戲目前資料】
 
 【劇情摘要】
-
 {game.get("story_summary", "")}
 
 【最近劇情】
-
 {recent_text}
 
 【玩家資料】
-
-{json.dumps(
-    player_for_model,
-    ensure_ascii=False
-)}
+{player_text}
 
 【背包】
-
 {inventory_text}
 
 【人物關係】
-
 {npc_text}
 
 【上一個玩家行動】
-
 {action}
 
 【重要】
@@ -903,17 +858,15 @@ def build_game_prompt(action):
 
 不要重新描述相同事件。
 
-如果玩家只是觀察，
-必須讓觀察得到新的資訊。
+如果玩家只是觀察，就必須讓觀察得到新的資訊。
 
-如果玩家交涉，
-必須讓 NPC 回應。
+如果玩家交涉，就讓人物回應。
 
-如果玩家探索，
-必須讓探索得到結果。
+如果玩家探索，就讓探索得到結果。
 
-如果玩家冒險，
-必須承擔合理風險。
+如果玩家冒險，就必須承擔合理風險。
+
+如果玩家進行戰鬥，戰鬥結果必須符合玩家目前實力。
 
 請按照指定 JSON 格式輸出。
 """
@@ -922,7 +875,7 @@ def build_game_prompt(action):
 
 
 # =========================================================
-# 13. 玩家數值
+# 14. 套用玩家數值
 # =========================================================
 
 def apply_player_changes(data):
@@ -939,80 +892,51 @@ def apply_player_changes(data):
     if not isinstance(update, dict):
         update = {}
 
-    try:
-        hp_change = int(
-            update.get(
-                "hp_change",
-                0
-            )
-        )
-    except Exception:
-        hp_change = 0
+    def safe_int(value, default=0):
 
-    try:
-        mp_change = int(
-            update.get(
-                "mp_change",
-                0
-            )
-        )
-    except Exception:
-        mp_change = 0
+        try:
+            return int(value)
+        except Exception:
+            return default
 
-    try:
-        fullness_change = int(
-            update.get(
-                "fullness_change",
-                0
-            )
-        )
-    except Exception:
-        fullness_change = 0
+    hp_change = safe_int(
+        update.get("hp_change", 0)
+    )
 
-    try:
-        money_change = int(
-            update.get(
-                "money_change",
-                0
-            )
-        )
-    except Exception:
-        money_change = 0
+    mp_change = safe_int(
+        update.get("mp_change", 0)
+    )
+
+    fullness_change = safe_int(
+        update.get("fullness_change", 0)
+    )
+
+    money_change = safe_int(
+        update.get("money_change", 0)
+    )
 
     player["hp"] += hp_change
     player["mp"] += mp_change
     player["fullness"] += fullness_change
     player["money"] += money_change
 
-    realm = update.get(
-        "realm"
-    )
+    realm = update.get("realm")
 
-    if realm and realm != "維持不變":
-        player["realm"] = str(
-            realm
-        )
+    if realm and str(realm) != "維持不變":
+        player["realm"] = str(realm)
 
-    location = update.get(
-        "location"
-    )
+    location = update.get("location")
 
-    if location and location != "維持不變":
-        player["location"] = str(
-            location
-        )
+    if location and str(location) != "維持不變":
+        player["location"] = str(location)
 
-    normalise_player(
-        player
-    )
+    normalise_player(player)
 
-    player["status"] = get_status_text(
-        player
-    )
+    player["status"] = get_status_text(player)
 
 
 # =========================================================
-# 14. 背包
+# 15. 背包
 # =========================================================
 
 def apply_inventory_changes(data):
@@ -1027,10 +951,7 @@ def apply_inventory_changes(data):
     if not isinstance(changes, list):
         return
 
-    inventory = game.setdefault(
-        "inventory",
-        []
-    )
+    inventory = game["inventory"]
 
     for change in changes:
 
@@ -1038,10 +959,7 @@ def apply_inventory_changes(data):
             continue
 
         name = str(
-            change.get(
-                "name",
-                ""
-            )
+            change.get("name", "")
         ).strip()
 
         if not name:
@@ -1065,27 +983,15 @@ def apply_inventory_changes(data):
         for item in inventory:
 
             if item.get("name") == name:
-
                 found = item
                 break
 
         if found:
 
-            found["count"] = (
-                int(
-                    found.get(
-                        "count",
-                        0
-                    )
-                )
-                + amount
-            )
+            found["count"] += amount
 
             if found["count"] <= 0:
-
-                inventory.remove(
-                    found
-                )
+                inventory.remove(found)
 
         elif amount > 0:
 
@@ -1098,13 +1004,13 @@ def apply_inventory_changes(data):
                             "desc",
                             "未知物品"
                         )
-                    ),
+                    )
                 }
             )
 
 
 # =========================================================
-# 15. NPC
+# 16. NPC
 # =========================================================
 
 def apply_npc_updates(data):
@@ -1119,48 +1025,24 @@ def apply_npc_updates(data):
     if not isinstance(updates, list):
         return
 
-    npcs = game.setdefault(
-        "npcs",
-        {}
-    )
-
     for npc in updates:
 
         if not isinstance(npc, dict):
             continue
 
         name = str(
-            npc.get(
-                "name",
-                ""
-            )
+            npc.get("name", "")
         ).strip()
 
         if not name:
             continue
 
-        old = npcs.get(
+        old = game["npcs"].get(
             name,
             {}
         )
 
-        try:
-            affinity = int(
-                npc.get(
-                    "affinity",
-                    old.get(
-                        "affinity",
-                        0
-                    )
-                )
-            )
-        except Exception:
-            affinity = old.get(
-                "affinity",
-                0
-            )
-
-        npcs[name] = {
+        merged = {
             "name": name,
 
             "identity": npc.get(
@@ -1179,7 +1061,13 @@ def apply_npc_updates(data):
                 )
             ),
 
-            "affinity": affinity,
+            "affinity": npc.get(
+                "affinity",
+                old.get(
+                    "affinity",
+                    0
+                )
+            ),
 
             "key_memory": npc.get(
                 "key_memory",
@@ -1187,12 +1075,14 @@ def apply_npc_updates(data):
                     "key_memory",
                     ""
                 )
-            ),
+            )
         }
+
+        game["npcs"][name] = merged
 
 
 # =========================================================
-# 16. 防重複
+# 17. 防止重複劇情
 # =========================================================
 
 def is_duplicate_story(new_story):
@@ -1227,23 +1117,22 @@ def is_duplicate_story(new_story):
 
     if len(clean_a) > 80 and len(clean_b) > 80:
 
-        sample_a = clean_a[:300]
-        sample_b = clean_b[:300]
+        same_chars = 0
 
-        same = sum(
-            a == b
-            for a, b in zip(
-                sample_a,
-                sample_b
-            )
+        check_length = min(
+            len(clean_a),
+            len(clean_b),
+            300
         )
 
-        ratio = same / max(
+        for i in range(check_length):
+
+            if clean_a[i] == clean_b[i]:
+                same_chars += 1
+
+        ratio = same_chars / max(
             1,
-            min(
-                len(sample_a),
-                len(sample_b)
-            )
+            check_length
         )
 
         if ratio > 0.85:
@@ -1253,118 +1142,116 @@ def is_duplicate_story(new_story):
 
 
 # =========================================================
-# 17. 模型重試
+# 18. 建立 fallback 劇情
 # =========================================================
 
-def retry_generation(action):
+def fallback_story():
 
-    prompt = build_game_prompt(
-        action
-    )
+    return {
+        "story": (
+            "你停下腳步，沒有貿然行動。"
+            "片刻之後，你注意到附近的氣氛似乎發生了細微變化。"
+            "遠處的人群之中，有一道目光短暫地落在你身上，"
+            "隨後又若無其事地移開。"
+            "你不知道那人是誰，也不知道對方為何注意到你。"
+        ),
 
-    prompt += """
+        "story_summary_update": (
+            "你開始察覺周圍並不像表面上那麼平靜，"
+            "似乎有人正在暗中注意你。"
+        ),
 
-上一個生成結果不可使用。
+        "options": [
+            "暗中追查剛才那道目光的來源。",
+            "主動找附近的人打聽最近發生的事情。",
+            "先離開人群，尋找一處安全的地方。",
+            "假裝沒有發現異常，繼續尋找賺錢的機會。"
+        ],
 
-請重新生成完全不同的新劇情。
-
-這一次必須：
-
-一、真正推進事件。
-二、不要重複上一段。
-三、提供四個不同策略的選項。
-四、嚴格輸出合法 JSON。
-五、不要輸出 Markdown。
-"""
-
-    messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT,
+        "player_update": {
+            "hp_change": 0,
+            "mp_change": 0,
+            "fullness_change": 0,
+            "money_change": 0,
+            "realm": "維持不變",
+            "location": "維持不變",
+            "status": "健康"
         },
-        {
-            "role": "user",
-            "content": prompt,
-        },
-    ]
 
-    raw = call_nemotron(
-        messages
-    )
+        "inventory_changes": [],
 
-    return parse_json_response(
-        raw
-    )
+        "npc_updates": []
+    }
 
 
 # =========================================================
-# 18. 處理回合
+# 19. 處理玩家回合
 # =========================================================
 
 def process_turn(action):
 
     game = st.session_state.game_state
 
-    if game.get(
-        "processing",
-        False
-    ):
+    if game.get("processing", False):
         return
-
-    action = str(
-        action
-    ).strip()
-
-    if not action:
-        return
-
-    # -----------------------------------------------------
-    # 查看狀態
-    # -----------------------------------------------------
-
-    if action.startswith(
-        "查看狀態"
-    ):
-
-        player = game["player"]
-
-        status_story = (
-            "你暫時停下腳步。\n\n"
-            "你仔細整理自己的狀態。\n\n"
-            f"目前生命狀態為【{player['hp']}/{player['max_hp']}】。\n"
-            f"體內靈力為【{player['mp']}/{player['max_mp']}】。\n"
-            f"飽腹程度為【{player['fullness']}/100】。\n"
-            f"身上共有【{player['money']}文錢】。\n\n"
-            f"目前境界：{player['realm']}。\n"
-            f"目前位置：{player['location']}。\n"
-            f"目前狀態：{player['status']}。"
-        )
-
-        game["story_history"].append(
-            status_story
-        )
-
-        game["last_action"] = action
-
-        return
-
-    # -----------------------------------------------------
-    # 鎖定
-    # -----------------------------------------------------
 
     game["processing"] = True
 
     try:
 
-        # -------------------------------------------------
-        # 回合增加
-        # -------------------------------------------------
+        action = str(action).strip()
+
+        if not action:
+            return
+
+        # =================================================
+        # 查看狀態
+        # =================================================
+
+        if action.startswith("查看狀態"):
+
+            player = game["player"]
+
+            status_story = (
+                "你暫時停下腳步。\n\n"
+                "你仔細整理自己的狀態。\n\n"
+                f"目前生命狀態為【"
+                f"{player['hp']}/"
+                f"{player['max_hp']}】。\n"
+
+                f"體內靈力為【"
+                f"{player['mp']}/"
+                f"{player['max_mp']}】。\n"
+
+                f"飽腹程度為【"
+                f"{player['fullness']}/100】。\n"
+
+                f"身上共有【"
+                f"{player['money']}文錢】。\n\n"
+
+                f"目前境界："
+                f"{player['realm']}。\n"
+
+                f"目前位置："
+                f"{player['location']}。\n"
+
+                f"目前狀態："
+                f"{player['status']}。"
+            )
+
+            game["story_history"].append(
+                status_story
+            )
+
+            game["last_action"] = action
+
+            return
+
+        # =================================================
+        # 實際回合
+        # =================================================
 
         game["turn"] += 1
-
-        # -------------------------------------------------
-        # Prompt
-        # -------------------------------------------------
 
         prompt = build_game_prompt(
             action
@@ -1373,112 +1260,155 @@ def process_turn(action):
         messages = [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT,
+                "content": SYSTEM_PROMPT
             },
             {
                 "role": "user",
-                "content": prompt,
-            },
+                "content": prompt
+            }
         ]
 
-        # -------------------------------------------------
-        # API
-        # -------------------------------------------------
+        # =================================================
+        # 呼叫模型
+        # =================================================
 
-        raw = call_nemotron(
-            messages
-        )
+        with st.spinner(
+            "🔮 命運正在推演……"
+        ):
 
-        # -------------------------------------------------
+            try:
+
+                raw = call_nemotron(
+                    messages
+                )
+
+            except Exception as error:
+
+                # 回復 turn，因為 API 根本沒有成功
+                game["turn"] = max(
+                    0,
+                    game["turn"] - 1
+                )
+
+                st.error(
+                    "⚠️ AI 暫時無法回應"
+                )
+
+                error_text = str(error)
+
+                if "UnicodeEncodeError" in error_text:
+
+                    st.error(
+                        "偵測到 HTTP Header 編碼問題。"
+                        "請重新設定 Streamlit Secrets 裡面的 API Key。"
+                    )
+
+                else:
+
+                    st.warning(
+                        error_text
+                    )
+
+                return
+
+        # =================================================
         # JSON
-        # -------------------------------------------------
+        # =================================================
 
         data = parse_json_response(
             raw
         )
 
-        # -------------------------------------------------
-        # JSON 失敗 → 修復
-        # -------------------------------------------------
+        # =================================================
+        # 第一次失敗 → 修復
+        # =================================================
 
         if data is None:
 
             repair_prompt = """
 你上一個回答不是合法 JSON。
 
-請重新輸出。
+請立即重新輸出。
 
 只可以輸出合法 JSON。
 
-不要輸出 Markdown。
-不要輸出程式碼。
-不要輸出任何說明文字。
+不可輸出 Markdown。
+不可輸出程式碼區塊。
+不可輸出任何說明文字。
+不可輸出英文。
 
-必須完全符合以下格式：
+格式：
 
 {
-  "story": "劇情",
-  "story_summary_update": "摘要",
-  "options": [
-    "選項一",
-    "選項二",
-    "選項三",
-    "選項四"
-  ],
-  "player_update": {
-    "hp_change": 0,
-    "mp_change": 0,
-    "fullness_change": 0,
-    "money_change": 0,
-    "realm": "維持不變",
-    "location": "維持不變",
-    "status": "健康"
-  },
-  "inventory_changes": [],
-  "npc_updates": []
+"story":"劇情",
+"story_summary_update":"摘要",
+"options":["選項一","選項二","選項三","選項四"],
+"player_update":{
+"hp_change":0,
+"mp_change":0,
+"fullness_change":0,
+"money_change":0,
+"realm":"維持不變",
+"location":"維持不變",
+"status":"健康"
+},
+"inventory_changes":[],
+"npc_updates":[]
 }
 """
 
-            repair_messages = [
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
+            messages.append(
                 {
                     "role": "assistant",
-                    "content": raw[:10000],
-                },
+                    "content": str(raw)[:6000]
+                }
+            )
+
+            messages.append(
                 {
                     "role": "user",
-                    "content": repair_prompt,
-                },
-            ]
-
-            raw = call_nemotron(
-                repair_messages
+                    "content": repair_prompt
+                }
             )
+
+            try:
+
+                raw = call_nemotron(
+                    messages
+                )
+
+            except Exception as error:
+
+                game["turn"] = max(
+                    0,
+                    game["turn"] - 1
+                )
+
+                st.error(
+                    "⚠️ 第二次 AI 請求失敗"
+                )
+
+                st.warning(
+                    str(error)
+                )
+
+                return
 
             data = parse_json_response(
                 raw
             )
 
-        # -------------------------------------------------
-        # JSON 第二次失敗
-        # -------------------------------------------------
+        # =================================================
+        # 兩次都失敗
+        # =================================================
 
         if data is None:
 
-            raise RuntimeError(
-                "模型連續兩次沒有返回有效 JSON。"
-            )
+            data = fallback_story()
 
-        # -------------------------------------------------
-        # 劇情
-        # -------------------------------------------------
+        # =================================================
+        # 故事
+        # =================================================
 
         story = str(
             data.get(
@@ -1489,41 +1419,72 @@ def process_turn(action):
 
         if not story:
 
-            story = (
-                "你停下腳步。\n\n"
-                "周圍的氣氛似乎比剛才更加微妙。"
-                "你沒有貿然行動，而是重新思考下一步。"
-            )
+            story = fallback_story()["story"]
 
-        # -------------------------------------------------
-        # 防止重複
-        # -------------------------------------------------
+        # =================================================
+        # 重複劇情
+        # =================================================
 
-        if is_duplicate_story(
-            story
-        ):
+        if is_duplicate_story(story):
 
-            retry_data = retry_generation(
+            retry_prompt = build_game_prompt(
                 action
             )
 
-            if retry_data:
+            retry_prompt += """
 
-                retry_story = str(
-                    retry_data.get(
-                        "story",
-                        ""
-                    )
-                ).strip()
+上一個生成結果與上一回合過於相似。
 
-                if retry_story:
+這一次必須發生新的事件。
 
-                    data = retry_data
-                    story = retry_story
+不要重複相同描述。
 
-        # -------------------------------------------------
-        # 套用玩家變化
-        # -------------------------------------------------
+必須讓劇情真正前進。
+
+只輸出指定 JSON。
+"""
+
+            retry_messages = [
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": retry_prompt
+                }
+            ]
+
+            try:
+
+                retry_raw = call_nemotron(
+                    retry_messages
+                )
+
+                retry_data = parse_json_response(
+                    retry_raw
+                )
+
+                if retry_data:
+
+                    retry_story = str(
+                        retry_data.get(
+                            "story",
+                            ""
+                        )
+                    ).strip()
+
+                    if retry_story:
+
+                        data = retry_data
+                        story = retry_story
+
+            except Exception:
+                pass
+
+        # =================================================
+        # 套用變化
+        # =================================================
 
         apply_player_changes(
             data
@@ -1537,9 +1498,9 @@ def process_turn(action):
             data
         )
 
-        # -------------------------------------------------
+        # =================================================
         # 飢餓機制
-        # -------------------------------------------------
+        # =================================================
 
         player = game["player"]
 
@@ -1569,9 +1530,9 @@ def process_turn(action):
             player
         )
 
-        # -------------------------------------------------
-        # 摘要
-        # -------------------------------------------------
+        # =================================================
+        # 故事摘要
+        # =================================================
 
         summary = str(
             data.get(
@@ -1585,13 +1546,11 @@ def process_turn(action):
 
         if summary:
 
-            game["story_summary"] = (
-                summary[:800]
-            )
+            game["story_summary"] = summary[:500]
 
-        # -------------------------------------------------
-        # 歷史
-        # -------------------------------------------------
+        # =================================================
+        # 記錄玩家行動
+        # =================================================
 
         game["story_history"].append(
             "【第 "
@@ -1608,21 +1567,19 @@ def process_turn(action):
         game["last_action"] = action
         game["last_story"] = story
 
-        # -------------------------------------------------
+        # =================================================
         # 限制記憶
-        # -------------------------------------------------
+        # =================================================
 
-        if len(
-            game["story_history"]
-        ) > 40:
+        if len(game["story_history"]) > 30:
 
             game["story_history"] = (
-                game["story_history"][-40:]
+                game["story_history"][-30:]
             )
 
-        # -------------------------------------------------
+        # =================================================
         # 選項
-        # -------------------------------------------------
+        # =================================================
 
         model_options = data.get(
             "options",
@@ -1652,12 +1609,10 @@ def process_turn(action):
             "仔細觀察附近環境，尋找新的線索。",
             "主動與附近的人交談，試探對方的目的。",
             "暫時避開人群，找一個安全地方思考下一步。",
-            "冒險靠近剛才發現的異常之處。",
+            "冒險靠近剛才發現的異常之處。"
         ]
 
-        while len(
-            valid_options
-        ) < 4:
+        while len(valid_options) < 4:
 
             valid_options.append(
                 default_options[
@@ -1675,38 +1630,26 @@ def process_turn(action):
             valid_options
         )
 
-        # -------------------------------------------------
-        # 成功訊息
-        # -------------------------------------------------
-
-        st.session_state.last_api_status = (
-            "✅ 命運推演完成"
-        )
-
     finally:
 
         game["processing"] = False
 
 
 # =========================================================
-# 19. 存檔
+# 20. 存檔
 # =========================================================
 
 def create_save():
 
     save_data = {
         "version": "V3.4",
-
-        "game_state": (
-            st.session_state.game_state
-        ),
-
+        "game_state": st.session_state.game_state,
         "current_options": (
             st.session_state.game_state.get(
                 "current_options",
                 []
             )
-        ),
+        )
     }
 
     return json.dumps(
@@ -1716,7 +1659,7 @@ def create_save():
 
 
 # =========================================================
-# 20. 讀檔
+# 21. 讀檔
 # =========================================================
 
 def load_save(save_string):
@@ -1777,21 +1720,14 @@ def load_save(save_string):
         ""
     )
 
-    game_state["processing"] = False
+    game_state.setdefault(
+        "processing",
+        False
+    )
 
     player = game_state.setdefault(
         "player",
         {}
-    )
-
-    player.setdefault(
-        "name",
-        "詩柔"
-    )
-
-    player.setdefault(
-        "identity",
-        "落魄凡人"
     )
 
     player.setdefault(
@@ -1825,58 +1761,8 @@ def load_save(save_string):
     )
 
     player.setdefault(
-        "realm",
-        "凡俗之軀"
-    )
-
-    player.setdefault(
-        "location",
-        "凡間·青石鎮"
-    )
-
-    player.setdefault(
         "status",
         "健康"
-    )
-
-    player.setdefault(
-        "comprehension",
-        10
-    )
-
-    player.setdefault(
-        "fortune",
-        10
-    )
-
-    player.setdefault(
-        "charm",
-        10
-    )
-
-    player.setdefault(
-        "righteousness",
-        0
-    )
-
-    player.setdefault(
-        "evil_aura",
-        0
-    )
-
-    player.setdefault(
-        "fame",
-        0
-    )
-
-    player.setdefault(
-        "secret_bloodline",
-        random.choice(BLOODLINES)
-    )
-
-    player.setdefault(
-        "bloodline_awakened",
-        False
     )
 
     normalise_player(
@@ -1895,7 +1781,7 @@ def load_save(save_string):
 
 
 # =========================================================
-# 21. Session State
+# 22. Session 初始化
 # =========================================================
 
 if "game_started" not in st.session_state:
@@ -1908,13 +1794,8 @@ if "game_state" not in st.session_state:
     st.session_state.game_state = None
 
 
-if "last_api_status" not in st.session_state:
-
-    st.session_state.last_api_status = ""
-
-
 # =========================================================
-# 22. 標題
+# 23. 標題
 # =========================================================
 
 st.title(
@@ -1927,7 +1808,7 @@ st.caption(
 
 
 # =========================================================
-# 23. 未開始
+# 24. 未開始遊戲
 # =========================================================
 
 if not st.session_state.game_started:
@@ -1937,8 +1818,7 @@ if not st.session_state.game_started:
     )
 
     st.write(
-        "你將從五文錢開始，"
-        "在三界之中一步一步尋找自己的道路。"
+        "你將從五文錢開始，在三界之中一步一步尋找自己的道路。"
     )
 
     with st.form(
@@ -1950,11 +1830,9 @@ if not st.session_state.game_started:
             value="詩柔"
         )
 
-        start_button = (
-            st.form_submit_button(
-                "🌸 開始新人生",
-                use_container_width=True
-            )
+        start_button = st.form_submit_button(
+            "🌸 開始新人生",
+            use_container_width=True
         )
 
         if start_button:
@@ -2002,17 +1880,11 @@ if not st.session_state.game_started:
                     + str(error)
                 )
 
-        else:
-
-            st.warning(
-                "請先貼上存檔內容。"
-            )
-
     st.stop()
 
 
 # =========================================================
-# 24. 取得遊戲
+# 25. 取得遊戲狀態
 # =========================================================
 
 game = st.session_state.game_state
@@ -2021,7 +1893,7 @@ player = game["player"]
 
 
 # =========================================================
-# 25. Sidebar
+# 26. Sidebar
 # =========================================================
 
 with st.sidebar:
@@ -2057,24 +1929,30 @@ with st.sidebar:
 
     col1.metric(
         "❤️ 生命",
-        f"{player['hp']}/{player['max_hp']}"
+        str(player["hp"])
+        + "/"
+        + str(player["max_hp"])
     )
 
     col2.metric(
         "💙 靈力",
-        f"{player['mp']}/{player['max_mp']}"
+        str(player["mp"])
+        + "/"
+        + str(player["max_mp"])
     )
 
     col3, col4 = st.columns(2)
 
     col3.metric(
         "🍚 飽腹",
-        f"{player['fullness']}/100"
+        str(player["fullness"])
+        + "/100"
     )
 
     col4.metric(
         "💰 金錢",
-        f"{player['money']} 文"
+        str(player["money"])
+        + " 文"
     )
 
     st.markdown("---")
@@ -2086,44 +1964,32 @@ with st.sidebar:
 
         st.write(
             "🧠 悟性："
-            + str(
-                player["comprehension"]
-            )
+            + str(player["comprehension"])
         )
 
         st.write(
             "🎲 福緣："
-            + str(
-                player["fortune"]
-            )
+            + str(player["fortune"])
         )
 
         st.write(
             "✨ 魅力："
-            + str(
-                player["charm"]
-            )
+            + str(player["charm"])
         )
 
         st.write(
             "⚖️ 正氣："
-            + str(
-                player["righteousness"]
-            )
+            + str(player["righteousness"])
         )
 
         st.write(
             "🩸 煞氣："
-            + str(
-                player["evil_aura"]
-            )
+            + str(player["evil_aura"])
         )
 
         st.write(
             "👑 威名："
-            + str(
-                player["fame"]
-            )
+            + str(player["fame"])
         )
 
     if player.get(
@@ -2155,7 +2021,7 @@ with st.sidebar:
             "📖 主線劇情",
             "🎒 背包",
             "👥 人物關係",
-            "💾 存檔／讀檔",
+            "💾 存檔／讀檔"
         ]
     )
 
@@ -2168,13 +2034,12 @@ with st.sidebar:
 
         st.session_state.game_started = False
         st.session_state.game_state = None
-        st.session_state.last_api_status = ""
 
         st.rerun()
 
 
 # =========================================================
-# 26. 主線劇情
+# 27. 主線劇情
 # =========================================================
 
 if page == "📖 主線劇情":
@@ -2183,17 +2048,9 @@ if page == "📖 主線劇情":
         "📖 主線劇情"
     )
 
-    # API 狀態
-    if st.session_state.last_api_status:
-
-        st.success(
-            st.session_state.last_api_status
-        )
-
-    # 劇情
     for text in game["story_history"]:
 
-        if text.startswith(
+        if str(text).startswith(
             "【第 "
         ):
 
@@ -2225,16 +2082,10 @@ if page == "📖 主線劇情":
             "檢查身上物品。",
             "與附近人物交談。",
             "尋找安全地方。",
-            "查看狀態",
+            "查看狀態"
         ]
 
-        game["current_options"] = (
-            options
-        )
-
-    # -----------------------------------------------------
-    # 選項按鈕
-    # -----------------------------------------------------
+        game["current_options"] = options
 
     for idx, option in enumerate(
         options
@@ -2250,32 +2101,19 @@ if page == "📖 主線劇情":
         if st.button(
             option,
             key=button_key,
-            use_container_width=True,
-            disabled=game.get(
-                "processing",
-                False
-            )
+            use_container_width=True
         ):
 
-            try:
+            if not game.get(
+                "processing",
+                False
+            ):
 
                 process_turn(
                     option
                 )
 
                 st.rerun()
-
-            except Exception as error:
-
-                game["processing"] = False
-
-                st.error(
-                    "⚠️ 命運推演失敗"
-                )
-
-                st.exception(
-                    error
-                )
 
     st.markdown("---")
 
@@ -2290,16 +2128,15 @@ if page == "📖 主線劇情":
 
     if st.button(
         "✍️ 執行自由行動",
-        use_container_width=True,
-        disabled=game.get(
-            "processing",
-            False
-        )
+        use_container_width=True
     ):
 
         if custom_action.strip():
 
-            try:
+            if not game.get(
+                "processing",
+                False
+            ):
 
                 process_turn(
                     custom_action.strip()
@@ -2307,27 +2144,9 @@ if page == "📖 主線劇情":
 
                 st.rerun()
 
-            except Exception as error:
-
-                game["processing"] = False
-
-                st.error(
-                    "⚠️ 命運推演失敗"
-                )
-
-                st.exception(
-                    error
-                )
-
-        else:
-
-            st.warning(
-                "請先輸入你想做的事情。"
-            )
-
 
 # =========================================================
-# 27. 背包
+# 28. 背包
 # =========================================================
 
 elif page == "🎒 背包":
@@ -2371,7 +2190,10 @@ elif page == "🎒 背包":
             ):
 
                 st.write(
-                    f"### {name} × {count}"
+                    "### "
+                    + str(name)
+                    + " × "
+                    + str(count)
                 )
 
                 st.write(
@@ -2380,7 +2202,7 @@ elif page == "🎒 背包":
 
 
 # =========================================================
-# 28. NPC
+# 29. NPC
 # =========================================================
 
 elif page == "👥 人物關係":
@@ -2410,7 +2232,10 @@ elif page == "👥 人物關係":
             )
 
             with st.expander(
-                f"🌸 {name}｜好感：{affinity}"
+                "🌸 "
+                + str(name)
+                + "｜好感："
+                + str(affinity)
             ):
 
                 st.write(
@@ -2445,7 +2270,7 @@ elif page == "👥 人物關係":
 
 
 # =========================================================
-# 29. 存檔
+# 30. 存檔／讀檔
 # =========================================================
 
 elif page == "💾 存檔／讀檔":
@@ -2516,7 +2341,7 @@ elif page == "💾 存檔／讀檔":
 
 
 # =========================================================
-# 30. Footer
+# 31. Footer
 # =========================================================
 
 st.markdown("---")
