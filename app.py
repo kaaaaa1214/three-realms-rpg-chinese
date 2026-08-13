@@ -881,7 +881,6 @@ def call_nemotron(
     "temperature": 0.8,
     "max_tokens": 2500,
 }
-
     if status_callback:
         status_callback(
             "📡 正在連接 AI……"
